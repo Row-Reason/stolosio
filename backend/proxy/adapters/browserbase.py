@@ -36,7 +36,7 @@ async def _release_remote_session(
             if delay:
                 await asyncio.sleep(delay)
             try:
-                response = await client.patch(
+                response = await client.post(
                     f"{api_url}/sessions/{provider_session_id}",
                     headers=headers,
                     json={"status": "REQUEST_RELEASE"},
