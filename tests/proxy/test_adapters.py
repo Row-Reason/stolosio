@@ -63,6 +63,9 @@ class FakeHttpClient:
 
     async def post(self, url: str, **kwargs) -> FakeResponse:
         self.requests.append(("POST", url, kwargs))
+        if not url.endswith("/sessions"):
+            assert kwargs["json"] == {"status": "REQUEST_RELEASE"}
+            return FakeResponse({})
         return FakeResponse(
             {
                 "id": "bb-session",
@@ -70,10 +73,6 @@ class FakeHttpClient:
                 "startedAt": "2026-07-18T01:02:03Z",
             }
         )
-
-    async def patch(self, url: str, **kwargs) -> FakeResponse:
-        self.requests.append(("PATCH", url, kwargs))
-        return FakeResponse({})
 
     async def get(self, url: str, **kwargs) -> FakeResponse:
         self.requests.append(("GET", url, kwargs))
@@ -180,6 +179,7 @@ async def test_browserbase_adapter_owns_remote_session_lifecycle(monkeypatch) ->
         ),
     )
     await provider_session.close()
+    await provider_session.close()
 
     assert provider_session.provider_session_id == "bb-session"
     assert provider_session.provider_started_at is not None
@@ -190,7 +190,7 @@ async def test_browserbase_adapter_owns_remote_session_lifecycle(monkeypatch) ->
     assert websocket.closed
     assert [(method, url) for method, url, _ in FakeHttpClient.requests] == [
         ("POST", "https://api.browserbase.example/v1/sessions"),
-        ("PATCH", "https://api.browserbase.example/v1/sessions/bb-session"),
+        ("POST", "https://api.browserbase.example/v1/sessions/bb-session"),
         ("GET", "https://api.browserbase.example/v1/sessions/bb-session"),
     ]
     assert FakeHttpClient.requests[0][2]["json"] == {
@@ -207,6 +207,8 @@ async def test_browserbase_releases_session_when_connect_url_is_missing(
 ) -> None:
     class MissingConnectUrlClient(FakeHttpClient):
         async def post(self, url: str, **kwargs) -> FakeResponse:
+            if not url.endswith("/sessions"):
+                return await super().post(url, **kwargs)
             self.requests.append(("POST", url, kwargs))
             return FakeResponse(
                 {
@@ -240,7 +242,7 @@ async def test_browserbase_releases_session_when_connect_url_is_missing(
     assert [(method, url) for method, url, _ in FakeHttpClient.requests] == [
         ("POST", "https://api.browserbase.example/v1/sessions"),
         (
-            "PATCH",
+            "POST",
             "https://api.browserbase.example/v1/sessions/orphaned-session",
         ),
         ("GET", "https://api.browserbase.example/v1/sessions/orphaned-session"),
