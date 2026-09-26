@@ -3,6 +3,10 @@
 An automatic Stolosio session may satisfy a bounded journey through plain HTTP while
 preserving the same downstream CDP endpoint and logical session identity.
 
+`stolosio.session.browser_required=true` skips HTTP entirely and prepares an eligible
+browser before accepting the connection. Use it when the client already knows its
+journey requires interactions or browser-only CDP operations.
+
 The HTTP facade initially covers `page.goto`, `page.content`, declarative
 `Emulation.setScriptExecutionDisabled` state for replay, and the exact Playwright
 bootstrap commands required by those operations.
