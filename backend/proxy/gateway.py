@@ -13,12 +13,20 @@ from backend.events.cdp import CdpEventObserver
 from backend.events.publisher import EventPublisher, NullEventPublisher
 from backend.proxy.adapters import get_provider_adapter
 from backend.proxy.attempts import AttemptAdmission, AttemptLease
-from backend.proxy.contracts import ProviderSelection, ResolvedSessionSettings
+from backend.proxy.contracts import (
+    ProviderName,
+    ProviderSelection,
+    ProviderSettingSchema,
+    ResolvedSessionSettings,
+    SettingSource,
+)
 from backend.proxy.errors import (
     ConnectionRejected,
     ProviderAcquisitionTimeout,
     ProviderConnectionLost,
+    ProviderTimeout,
     ProviderUnavailable,
+    SessionAdmissionTimeout,
     SessionLeaseLost,
 )
 from backend.proxy.escalation import (
@@ -26,7 +34,7 @@ from backend.proxy.escalation import (
     EscalationHistoryRepository,
 )
 from backend.proxy.network_policy import NetworkPolicyRepository
-from backend.proxy.routing import RoutingRepository
+from backend.proxy.routing import NoSupportedProvider, RoutingRepository
 from backend.proxy.sessions import SessionAdmission, SessionLease
 from backend.proxy.settings import StolosioSettingsResolver, stolosio_settings_resolver
 from backend.proxy.transport import relay_cdp
@@ -65,101 +73,124 @@ class Gateway:
         client_disconnected = False
         failed = False
         reason = "client_disconnected"
+        admission_budget = None
         try:
             requested, resolved = await self._resolver.resolve(
                 list(websocket.query_params.multi_items())
             )
-            if self._network_policy is not None:
-                network_policy = await self._network_policy.settings()
-                resolved = replace(
-                    resolved,
-                    blocked_domain_patterns=network_policy.blocked_domain_patterns,
-                    network_policy_version=network_policy.configuration_version,
-                )
-            initial = await websocket.receive()
-            if initial["type"] == "websocket.disconnect":
-                return
-            disconnected = asyncio.create_task(self._wait_for_disconnect(websocket))
-            try:
-                admission = asyncio.create_task(self._sessions.admit(requested))
-                done, _ = await asyncio.wait(
-                    {admission, disconnected},
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                if disconnected in done:
-                    client_disconnected = True
-                    reason = "client_disconnected"
-                    if admission.done() and not admission.cancelled():
-                        result = admission.exception()
-                        if result is None:
-                            session = admission.result()
-                    else:
-                        admission.cancel()
-                        await asyncio.gather(admission, return_exceptions=True)
+            timeout = resolved.session.admission_timeout_ms
+            admission_budget = asyncio.timeout(timeout / 1000 if timeout is not None else None)
+            async with admission_budget:
+                if self._network_policy is not None:
+                    network_policy = await self._network_policy.settings()
+                    resolved = replace(
+                        resolved,
+                        blocked_domain_patterns=network_policy.blocked_domain_patterns,
+                        network_policy_version=network_policy.configuration_version,
+                    )
+                initial = await websocket.receive()
+                if initial["type"] == "websocket.disconnect":
                     return
-                session = await admission
-
-                automatic = requested.provider is ProviderSelection.AUTO
-                if automatic:
-                    if disconnected.done():
+                disconnected = asyncio.create_task(self._wait_for_disconnect(websocket))
+                try:
+                    admission = asyncio.create_task(self._sessions.admit(requested))
+                    done, _ = await asyncio.wait(
+                        {admission, disconnected},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if disconnected in done:
                         client_disconnected = True
                         reason = "client_disconnected"
+                        if admission.done() and not admission.cancelled():
+                            result = admission.exception()
+                            if result is None:
+                                session = admission.result()
+                        else:
+                            admission.cancel()
+                            await asyncio.gather(admission, return_exceptions=True)
                         return
-                    if self._transition_repository is None:
-                        raise RuntimeError("Provider transition repository is unavailable")
-                    observer = CdpEventObserver(
-                        UUID(session.session.session_id),
-                        None,
-                        None,
-                        self._event_publisher,
-                    )
-                    provider_session = EscalatingProviderSession(
-                        session.session,
-                        resolved,
-                        self._attempts,
-                        self._transition_repository,
-                        observer,
-                        self._settings,
-                        self._routing,
-                    )
-                else:
-                    preparation = asyncio.create_task(self._prepare(session, resolved))
-                    lease_lost = asyncio.create_task(session.wait_lost())
-                    try:
-                        done, _ = await asyncio.wait(
-                            {preparation, disconnected, lease_lost},
-                            return_when=asyncio.FIRST_COMPLETED,
-                        )
-                        if disconnected in done:
+                    session = await admission
+
+                    automatic = requested.provider is ProviderSelection.AUTO
+                    if automatic and not resolved.session.browser_required:
+                        if disconnected.done():
                             client_disconnected = True
                             reason = "client_disconnected"
-                            if preparation.done() and not preparation.cancelled():
-                                result = preparation.exception()
-                                if result is None:
-                                    attempt, provider_session = preparation.result()
-                            else:
+                            return
+                        if self._transition_repository is None:
+                            raise RuntimeError("Provider transition repository is unavailable")
+                        observer = CdpEventObserver(
+                            UUID(session.session.session_id),
+                            None,
+                            None,
+                            self._event_publisher,
+                        )
+                        provider_session = EscalatingProviderSession(
+                            session.session,
+                            resolved,
+                            self._attempts,
+                            self._transition_repository,
+                            observer,
+                            self._settings,
+                            self._routing,
+                        )
+                    else:
+                        prepare = self._prepare_browser if automatic else self._prepare
+                        preparation = asyncio.create_task(prepare(session, resolved))
+                        lease_lost = asyncio.create_task(session.wait_lost())
+                        try:
+                            done, _ = await asyncio.wait(
+                                {preparation, disconnected, lease_lost},
+                                return_when=asyncio.FIRST_COMPLETED,
+                            )
+                            if disconnected in done:
+                                client_disconnected = True
+                                reason = "client_disconnected"
+                                if preparation.done() and not preparation.cancelled():
+                                    result = preparation.exception()
+                                    if result is None:
+                                        attempt, provider_session = preparation.result()
+                                else:
+                                    preparation.cancel()
+                                    await asyncio.gather(preparation, return_exceptions=True)
+                                return
+                            if lease_lost in done:
                                 preparation.cancel()
                                 await asyncio.gather(preparation, return_exceptions=True)
-                            return
-                        if lease_lost in done:
-                            preparation.cancel()
+                                raise SessionLeaseLost
+                            attempt, provider_session = await preparation
+                        finally:
+                            if not preparation.done():
+                                preparation.cancel()
                             await asyncio.gather(preparation, return_exceptions=True)
-                            raise SessionLeaseLost
-                        attempt, provider_session = await preparation
-                    finally:
-                        if not lease_lost.done():
-                            lease_lost.cancel()
-                        await asyncio.gather(lease_lost, return_exceptions=True)
-            finally:
-                if not disconnected.done():
-                    disconnected.cancel()
-                await asyncio.gather(disconnected, return_exceptions=True)
+                            if (
+                            attempt is None
+                            and not preparation.cancelled()
+                            and preparation.exception() is None
+                        ):
+                                attempt, provider_session = preparation.result()
+                            if not lease_lost.done():
+                                lease_lost.cancel()
+                            await asyncio.gather(lease_lost, return_exceptions=True)
+                finally:
+                    if not admission.done():
+                        admission.cancel()
+                    await asyncio.gather(admission, return_exceptions=True)
+                    if (
+                        session is None
+                        and not admission.cancelled()
+                        and admission.exception() is None
+                    ):
+                        session = admission.result()
+                    if not disconnected.done():
+                        disconnected.cancel()
+                    await asyncio.gather(disconnected, return_exceptions=True)
 
-            await session.open()
-            if attempt is not None:
-                await attempt.activate()
-            await websocket.accept()
-            accepted = True
+                await session.open()
+                if attempt is not None:
+                    await attempt.activate()
+                await websocket.accept()
+                accepted = True
 
             if observer is None:
                 assert attempt is not None
@@ -188,6 +219,15 @@ class Gateway:
             if lease_lost in done:
                 raise SessionLeaseLost
             await relay_task
+        except TimeoutError:
+            failed = True
+            error = (
+                SessionAdmissionTimeout()
+                if admission_budget is not None and admission_budget.expired()
+                else ProviderTimeout() if accepted else ProviderAcquisitionTimeout()
+            )
+            reason = error.reason
+            await self._reject(websocket, error)
         except ConnectionRejected as error:
             failed = True
             reason = error.reason
@@ -270,6 +310,34 @@ class Gateway:
                     observer.flush_command_summaries(),
                     "command summaries",
                 )
+
+    async def _prepare_browser(self, session: SessionLease, resolved: ResolvedSessionSettings):
+        """Acquire an eligible browser before accepting a browser-required session."""
+        if self._routing is None:
+            raise ProviderUnavailable
+        try:
+            plan = await self._routing.plan(
+                None,
+                exclude=frozenset({ProviderName.HTTP}),
+                allow_paid_fallback=resolved.provider.allow_paid_fallback,
+            )
+        except NoSupportedProvider as error:
+            raise ProviderUnavailable from error
+        last_error: ConnectionRejected = ProviderUnavailable()
+        for candidate in plan.candidates:
+            settings = replace(
+                resolved,
+                provider=ProviderSettingSchema(
+                    slug=candidate.provider,
+                    allow_paid_fallback=resolved.provider.allow_paid_fallback,
+                ),
+                sources={**resolved.sources, "stolosio.provider.slug": SettingSource.AUTO},
+            )
+            try:
+                return await self._prepare(session, settings)
+            except ConnectionRejected as error:
+                last_error = error
+        raise last_error
 
     async def _prepare(
         self,
@@ -384,7 +452,10 @@ class Gateway:
             return
         try:
             if websocket.application_state is WebSocketState.CONNECTING:
-                response = Response(status_code=error.status_code)
+                response = Response(
+                    status_code=error.status_code,
+                    headers={"Retry-After": "5"} if error.status_code == 429 else None,
+                )
                 # Uvicorn supplies Content-Length for WebSocket denial responses.
                 # Starlette also adds it to Response, producing an invalid duplicate
                 # header that strict CDP clients reject before seeing the status.

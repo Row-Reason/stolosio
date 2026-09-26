@@ -520,3 +520,26 @@ async def test_browserbase_requires_an_explicit_manual_probe(
 
     jobs = await promotion.schedule(delay_seconds=0)
     assert ProviderName.BROWSERBASE not in {job.provider for job in jobs}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("paid", [False, True])
+async def test_browser_admission_plan_without_domain_respects_policy(database_sessions, paid):
+    await ExternalCapacityRepository(database_sessions).ensure(
+        ProviderName.BROWSERBASE, enabled=True, max_active_sessions=5, max_queued_attempts=100,
+    )
+    routing = RoutingRepository(database_sessions)
+    await routing.ensure_defaults()
+    # Even when HTTP is the configured default, the capability requirement wins.
+    await routing.update_settings(default_provider=ProviderName.HTTP)
+    plan = await routing.plan(
+        None, exclude=frozenset({ProviderName.HTTP}), allow_paid_fallback=paid,
+    )
+    assert [candidate.provider for candidate in plan.candidates] == (
+        [ProviderName.BROWSERLESS, ProviderName.BROWSERBASE] if paid else [ProviderName.BROWSERLESS]
+    )
+    await routing.update_provider(ProviderName.BROWSERBASE, automatic_enabled=False)
+    plan = await routing.plan(
+        None, exclude=frozenset({ProviderName.HTTP}), allow_paid_fallback=True,
+    )
+    assert [candidate.provider for candidate in plan.candidates] == [ProviderName.BROWSERLESS]

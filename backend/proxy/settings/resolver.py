@@ -1,9 +1,13 @@
+from pydantic import ValidationError
+
 from backend.proxy.contracts import (
+    ProviderName,
     RequestedSessionSettings,
     ResolvedSessionSettings,
     SettingSource,
     SettingsResolutionContext,
 )
+from backend.proxy.errors import InvalidStolosioSettings
 from backend.proxy.planner import StolosioPlanner, static_stolosio_planner
 from backend.proxy.settings.registry import StolosioSettingsRegistry, stolosio_settings_registry
 
@@ -43,7 +47,12 @@ class StolosioSettingsResolver:
                 values[query] = defaults[query]
                 sources[query] = SettingSource.DEFAULT
 
-        models = self._registry.build_models(values)
+        try:
+            models = self._registry.build_models(values)
+        except ValidationError as error:
+            raise InvalidStolosioSettings from error
+        if models["session"].browser_required and models["provider"].slug is ProviderName.HTTP:
+            raise InvalidStolosioSettings
         return requested, ResolvedSessionSettings(
             provider=models["provider"],
             session=models["session"],

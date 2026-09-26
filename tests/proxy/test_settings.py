@@ -54,6 +54,8 @@ def test_registry_exposes_the_canonical_query_contract() -> None:
             "stolosio.provider.slug",
             "stolosio.provider.allow_paid_fallback",
             "stolosio.session.reference",
+            "stolosio.session.browser_required",
+            "stolosio.session.admission_timeout_ms",
         }
     )
 
@@ -135,3 +137,27 @@ async def test_explicit_value_takes_precedence_over_the_automatic_plan() -> None
 async def test_rejects_invalid_stolosio_settings(query: list[tuple[str, str]]) -> None:
     with pytest.raises(InvalidStolosioSettings):
         await stolosio_settings_resolver.resolve(query)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["0", "-1", "60001", "1.5", "auto", "invalid"])
+async def test_admission_budget_is_bounded(value):
+    with pytest.raises(InvalidStolosioSettings):
+        await stolosio_settings_resolver.resolve([("stolosio.session.admission_timeout_ms", value)])
+
+
+@pytest.mark.asyncio
+async def test_browser_requirement_keeps_automatic_provider_and_rejects_forced_http():
+    requested, resolved = await stolosio_settings_resolver.resolve([
+        ("stolosio.session.browser_required", "true"),
+        ("stolosio.session.admission_timeout_ms", "2500"),
+    ])
+    assert requested.provider is ProviderSelection.AUTO
+    assert resolved.session.browser_required
+    assert resolved.session.admission_timeout_ms == 2500
+    assert not resolved.provider.allow_paid_fallback
+    with pytest.raises(InvalidStolosioSettings):
+        await stolosio_settings_resolver.resolve([
+            ("stolosio.session.browser_required", "true"),
+            ("stolosio.provider.slug", "http"),
+        ])

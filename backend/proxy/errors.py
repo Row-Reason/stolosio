@@ -17,19 +17,19 @@ class InvalidStolosioSettings(ConnectionRejected):
 class ProviderQueueTimeout(ConnectionRejected):
     close_code = 4408
     reason = "provider_queue_timeout"
-    status_code = 503
+    status_code = 429
 
 
 class GatewayCapacityFull(ConnectionRejected):
     close_code = 1013
     reason = "gateway_capacity_full"
-    status_code = 503
+    status_code = 429
 
 
 class ProviderQueueFull(ConnectionRejected):
     close_code = 4429
     reason = "provider_queue_full"
-    status_code = 503
+    status_code = 429
 
 
 class ProviderUnavailable(ConnectionRejected):
@@ -69,3 +69,9 @@ class DomainBlockingUnavailable(ConnectionRejected):
     close_code = 4510
     reason = "domain_blocking_unavailable"
     status_code = 503
+
+
+class SessionAdmissionTimeout(ConnectionRejected):
+    close_code = 4408
+    reason = "session_admission_timeout"
+    status_code = 429

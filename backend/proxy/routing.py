@@ -199,7 +199,7 @@ class RoutingRepository:
 
     async def plan(
         self,
-        hostname: str,
+        hostname: str | None,
         *,
         required_commands: tuple[tuple[str, dict | None], ...] = (),
         exclude: frozenset[ProviderName] = frozenset(),
@@ -224,7 +224,10 @@ class RoutingRepository:
                 )
             )
             profile_by_provider = {ProviderName(profile.provider): profile for profile in profiles}
-            domain_id = await database.scalar(select(Domain.id).where(Domain.hostname == hostname))
+            domain_id = (
+                await database.scalar(select(Domain.id).where(Domain.hostname == hostname))
+                if hostname is not None else None
+            )
             health = (
                 list(
                     await database.scalars(
@@ -316,6 +319,7 @@ class RoutingRepository:
         explore_http = (
             preferred_provider is ProviderName.BROWSERLESS
             and exploration_key is not None
+            and hostname is not None
             and self._exploration_bucket(hostname, exploration_key) < _HTTP_EXPLORATION_BASIS_POINTS
         )
         reason = "cheapest_eligible"

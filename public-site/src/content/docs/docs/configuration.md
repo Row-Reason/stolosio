@@ -15,11 +15,13 @@ Explicit query settings override Stolosio's automatic plan, which overrides defa
 
 ## Common connection settings
 
-| Setting                                 | Purpose                                                                                 |
-| --------------------------------------- | --------------------------------------------------------------------------------------- |
-| `stolosio.provider.slug`                | Explicitly select `http`, `browserless`, or `browserbase`. Omit for automatic planning. |
-| `stolosio.provider.allow_paid_fallback` | Set to `true` to permit automatic paid fallback after local candidates.                 |
-| `stolosio.session.reference`            | Supply a UUID to correlate a CDP connection with the DEBUG stream.                      |
+| Setting                                 | Purpose                                                                                                                                 |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `stolosio.provider.slug`                | Explicitly select `http`, `browserless`, or `browserbase`. Omit for automatic planning.                                                 |
+| `stolosio.provider.allow_paid_fallback` | Set to `true` to permit automatic paid fallback after local candidates.                                                                 |
+| `stolosio.session.reference`            | Supply a UUID to correlate a CDP connection with the DEBUG stream.                                                                      |
+| `stolosio.session.browser_required`     | Set to `true` to acquire a browser before connection acceptance; automatic provider selection and paid-fallback permission still apply. |
+| `stolosio.session.admission_timeout_ms` | Bound total admission and provider preparation to 1–60,000 ms. Does not limit navigation or an accepted session.                        |
 
 ```text
 ws://localhost:8411/v1/connect?stolosio.provider.slug=browserless
@@ -38,3 +40,9 @@ The admin host port is controlled by `STOLOSIO_ADMIN_PORT`. Saved fleet and rout
 Consult the [chart values](https://github.com/elei-io/stolosio/blob/main/charts/stolosio/values.yaml) for the version you deploy. The chart accepts existing database, NATS, and optional Browserbase Secrets. It also defines static workload settings such as images, resources, and scheduling constraints.
 
 Stolosio's live browser replica count and concurrency are owned by its fleet controller and saved policy.
+
+A browser requirement conflicts with explicit `stolosio.provider.slug=http`.
+Capacity and admission-wait denials return HTTP 429 with `Retry-After: 5` before
+WebSocket acceptance. Use jittered retries and allow a small margin between the
+server admission budget and the client connection timeout. Provider availability
+failures remain HTTP 503/504.

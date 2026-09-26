@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.proxy.contracts.provider import ProviderName
 
@@ -29,6 +29,8 @@ class ProviderSettingSchema(BaseModel):
 
 class SessionSettingSchema(BaseModel):
     reference: UUID | None = None
+    browser_required: bool = False
+    admission_timeout_ms: int | None = Field(default=None, ge=1, le=60_000)
 
 
 @dataclass(frozen=True, slots=True)

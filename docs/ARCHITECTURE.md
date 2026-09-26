@@ -10,6 +10,34 @@ Existing CDP and Playwright `connect_over_cdp()` clients should need only a URL 
 Stolosio settings use the `stolosio.*` query namespace; provider addresses and credentials
 are never public API.
 
+## Acquisition clients
+
+Clients that know they require browser execution can set
+`stolosio.session.browser_required=true`. Automatic routing then excludes HTTP and
+acquires an eligible browser before accepting the WebSocket. The existing planner
+still owns enabled providers, capacity and explicit paid-fallback permission.
+An explicit browser provider is honored; explicit HTTP conflicts with this requirement
+and is rejected as invalid settings. Omitting the requirement retains lazy HTTP
+execution and live escalation.
+
+`stolosio.session.admission_timeout_ms` (1–60,000) bounds the combined network-policy
+lookup, logical-session admission, provider queue/acquisition and WebSocket acceptance.
+It cannot extend server-side provider limits. It ends at acceptance, so it is not a
+navigation or session-lifetime timeout. Clients must separately bound CDP bootstrap,
+navigation and cleanup; use a slightly longer client connection budget to receive a
+denial. Cancellation drains pending admissions and releases late-acquired capacity.
+
+Capacity-full, provider-queue timeout and session-admission timeout denials use HTTP
+429 with `Retry-After: 5` before WebSocket acceptance. Provider availability failures
+remain 503/504. After acceptance, existing CDP/WebSocket errors apply. Clients should
+jitter capacity retries and avoid counting pre-accept denials as page captures.
+
+Periplus opts into these settings with `PERIPLUS_CDP_STOLOSIO=true`, deriving the
+browser requirement from its capture policy. Deploy support here before enabling
+that integration.
+Periplus closes CDP after collecting bytes, before archive persistence; Stolosio
+releases the associated provider slot through normal disconnect cleanup.
+
 ## Data path
 
 ```text
