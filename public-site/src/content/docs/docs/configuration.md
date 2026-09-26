@@ -15,13 +15,13 @@ Explicit query settings override Stolosio's automatic plan, which overrides defa
 
 ## Common connection settings
 
-| Setting                                 | Purpose                                                                                 |
-| --------------------------------------- | --------------------------------------------------------------------------------------- |
-| `stolosio.provider.slug`                | Explicitly select `http`, `browserless`, or `browserbase`. Omit for automatic planning. |
-| `stolosio.provider.allow_paid_fallback` | Set to `true` to permit automatic paid fallback after local candidates.                 |
-| `stolosio.session.reference`            | Supply a UUID to correlate a CDP connection with the DEBUG stream.                      |
-| `stolosio.session.browser_required` | Set to `true` to acquire a browser before connection acceptance; automatic provider selection and paid-fallback permission still apply. |
-| `stolosio.session.admission_timeout_ms` | Bound total admission and provider preparation to 1–60,000 ms. Does not limit navigation or an accepted session. |
+| Setting                                 | Purpose                                                                                                                                 |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `stolosio.provider.slug`                | Explicitly select `http`, `browserless`, or `browserbase`. Omit for automatic planning.                                                 |
+| `stolosio.provider.allow_paid_fallback` | Set to `true` to permit automatic paid fallback after local candidates.                                                                 |
+| `stolosio.session.reference`            | Supply a UUID to correlate a CDP connection with the DEBUG stream.                                                                      |
+| `stolosio.session.browser_required`     | Set to `true` to acquire a browser before connection acceptance; automatic provider selection and paid-fallback permission still apply. |
+| `stolosio.session.admission_timeout_ms` | Bound total admission and provider preparation to 1–60,000 ms. Does not limit navigation or an accepted session.                        |
 
 ```text
 ws://localhost:8411/v1/connect?stolosio.provider.slug=browserless
