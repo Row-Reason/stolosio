@@ -33,8 +33,8 @@ remain 503/504. After acceptance, existing CDP/WebSocket errors apply. Clients s
 jitter capacity retries and avoid counting pre-accept denials as page captures.
 
 Periplus opts into these settings with `PERIPLUS_CDP_STOLOSIO=true`, deriving the
-browser requirement from its capture policy and correlating each attempt through
-`stolosio.session.reference`. Deploy support here before enabling that integration.
+browser requirement from its capture policy. Deploy support here before enabling
+that integration.
 Periplus closes CDP after collecting bytes, before archive persistence; Stolosio
 releases the associated provider slot through normal disconnect cleanup.
 
