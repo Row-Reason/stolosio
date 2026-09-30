@@ -17,7 +17,7 @@ Content-Type: application/json
 | --- | --- |
 | 200 | Every capture result, `captured` or `failed` |
 | 400 | An invalid request, including a `url` its own exclusions cover |
-| 503 + `Retry-After` | No capacity to start the capture; the body is a `failed` result with failure code `capacity` |
+| 503 + `Retry-After` | No capacity to start the capture, or a database conflict that outlasted retries; the body is a `failed` result with failure code `capacity` |
 
 There is no authentication: the endpoint is for callers inside the deployment's network.
 
@@ -27,7 +27,9 @@ A capture is a Stolosio session that holds one slot of the local `browserless` f
 admission to response: plain HTTP first, then a render on that slot when needed. Captures and
 `/v1/connect` sessions share the global session limit, the provider queue and its accounting. When
 admission can't finish while at least 10 seconds of the capture's deadline remain, or the queue is
-full, the capture is refused with 503.
+full, the capture is refused with 503. Admission retries a Postgres deadlock or serialization
+failure a few times; one that still fails refuses the capture with 503 and detail
+`database_conflict`, never 500.
 
 ## Egress and network policy
 

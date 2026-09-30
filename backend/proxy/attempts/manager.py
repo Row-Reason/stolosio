@@ -1,9 +1,12 @@
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import datetime
+from functools import partial
 from uuid import uuid4
 
+from backend.db.errors import is_transient_database_error
 from backend.messaging import CapacityNotifier, PollingNotifier
 from backend.proxy.contracts import (
     AttemptState,
@@ -21,22 +24,26 @@ from backend.settings import Settings
 
 logger = logging.getLogger(__name__)
 
-_TRANSIENT_DATABASE_STATES = {"40001", "40P01"}
-_DATABASE_RELEASE_ATTEMPTS = 3
+_DATABASE_ATTEMPTS = 3
 
 
-def _is_transient_database_error(error: BaseException) -> bool:
-    current: BaseException | None = error
-    while current is not None:
-        sqlstate = getattr(current, "sqlstate", None) or getattr(
-            current,
-            "pgcode",
-            None,
-        )
-        if sqlstate in _TRANSIENT_DATABASE_STATES:
-            return True
-        current = current.__cause__
-    return False
+async def _retry_transient[T](operation: Callable[[], Awaitable[T]], description: str) -> T:
+    """Runs one admission transaction again when Postgres rolled it back for a deadlock or
+    serialization failure; each run is a whole transaction, so a retry repeats nothing."""
+    for database_attempt in range(1, _DATABASE_ATTEMPTS + 1):
+        try:
+            return await operation()
+        except Exception as error:
+            if database_attempt == _DATABASE_ATTEMPTS or not is_transient_database_error(error):
+                raise
+            logger.warning(
+                "Retrying %s after transient database error (%s/%s)",
+                description,
+                database_attempt,
+                _DATABASE_ATTEMPTS,
+            )
+            await asyncio.sleep(0)
+    raise AssertionError("unreachable")
 
 
 class AttemptLease:
@@ -88,30 +95,16 @@ class AttemptLease:
     ) -> None:
         if self._released:
             return
-        for release_attempt in range(1, _DATABASE_RELEASE_ATTEMPTS + 1):
-            try:
-                released = await self._repository.finish(
-                    self.attempt,
-                    failed=failed,
-                    reason=reason,
-                    command_summary=command_summary,
-                    phase_summary=phase_summary,
-                )
-                break
-            except Exception as error:
-                if (
-                    release_attempt == _DATABASE_RELEASE_ATTEMPTS
-                    or not _is_transient_database_error(error)
-                ):
-                    raise
-                logger.warning(
-                    "Retrying acquisition attempt %s release after transient "
-                    "database error (%s/%s)",
-                    self.attempt.attempt_id,
-                    release_attempt,
-                    _DATABASE_RELEASE_ATTEMPTS,
-                )
-                await asyncio.sleep(0)
+        released = await _retry_transient(
+            lambda: self._repository.finish(
+                self.attempt,
+                failed=failed,
+                reason=reason,
+                command_summary=command_summary,
+                phase_summary=phase_summary,
+            ),
+            f"acquisition attempt {self.attempt.attempt_id} release",
+        )
         self._released = True
         if released:
             try:
@@ -152,42 +145,45 @@ class AttemptAdmission:
             state=AttemptState.REQUESTED,
         )
         try:
-            status, attempt = await self._repository.enqueue(
-                session,
-                attempt.attempt_id,
-                provider,
-                resolved_settings={
-                    "stolosio.provider.slug": provider.value,
-                    "policy.network.blocked_domain_patterns": list(
-                        resolved.blocked_domain_patterns
-                    ),
-                    "policy.network.configuration_version": (
-                        resolved.network_policy_version
-                    ),
-                },
-                setting_sources={
-                    **{
-                        field: source.value
-                        for field, source in resolved.sources.items()
-                        if field != "stolosio.session.reference"
+            status, attempt = await _retry_transient(
+                lambda: self._repository.enqueue(
+                    session,
+                    attempt.attempt_id,
+                    provider,
+                    resolved_settings={
+                        "stolosio.provider.slug": provider.value,
+                        "policy.network.blocked_domain_patterns": list(
+                            resolved.blocked_domain_patterns
+                        ),
+                        "policy.network.configuration_version": (
+                            resolved.network_policy_version
+                        ),
                     },
-                    "policy.network.blocked_domain_patterns": (
-                        SettingSource.POLICY.value
-                    ),
-                    "policy.network.configuration_version": (
-                        SettingSource.POLICY.value
-                    ),
-                },
-                replacement_for=replacement_for,
+                    setting_sources={
+                        **{
+                            field: source.value
+                            for field, source in resolved.sources.items()
+                            if field != "stolosio.session.reference"
+                        },
+                        "policy.network.blocked_domain_patterns": (
+                            SettingSource.POLICY.value
+                        ),
+                        "policy.network.configuration_version": (
+                            SettingSource.POLICY.value
+                        ),
+                    },
+                    replacement_for=replacement_for,
+                ),
+                f"acquisition attempt {attempt.attempt_id} admission",
             )
             if status is AttemptAdmissionStatus.FULL:
                 raise ProviderQueueFull
             if status is AttemptAdmissionStatus.QUEUED:
                 async with asyncio.timeout(self._settings.provider_queue_timeout_seconds):
                     while True:
-                        claimed = await self._repository.claim(
-                            session,
-                            attempt,
+                        claimed = await _retry_transient(
+                            partial(self._repository.claim, session, attempt),
+                            f"acquisition attempt {attempt.attempt_id} claim",
                         )
                         if claimed is not None:
                             attempt = claimed

@@ -10,6 +10,7 @@ from pagecapture.classify import Classifier
 from pagecapture.render import BrowserCapacity, Renderer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from backend.db.errors import is_transient_database_error
 from backend.db.models import SessionEventRecord
 from backend.events.registry import EventType, validate_payload
 from backend.metrics.definitions import (
@@ -43,6 +44,7 @@ logger = logging.getLogger(__name__)
 # Admission may use the deadline, but only while this much of it is left for the capture itself.
 MIN_CAPTURE_SECONDS = 10.0
 RETRY_AFTER_SECONDS = 5
+DATABASE_CONFLICT = "database_conflict"
 
 
 class CaptureUnavailable(Exception):
@@ -120,6 +122,16 @@ class CaptureRunner:
                 await part.close()
 
     async def capture(self, request: CaptureRequest) -> CaptureResult:
+        try:
+            return await self._capture(request)
+        except Exception as error:
+            # Admission retries deadlocks and serialization failures; one that outlasts those
+            # retries is still a conflict the caller can retry, not a server error.
+            if is_transient_database_error(error):
+                raise self._unavailable(DATABASE_CONFLICT) from error
+            raise
+
+    async def _capture(self, request: CaptureRequest) -> CaptureResult:
         started = time.monotonic()
         deadline_s = (request.deadline_ms or self._settings.capture_default_deadline_ms) / 1000
         policy = await self._network_policy.settings()
