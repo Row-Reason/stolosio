@@ -1,14 +1,14 @@
 # Downstream client examples
 
-These programs represent clients using Stolosio through Playwright's existing CDP API.
-They are executable examples now and end-to-end acceptance targets for Stolosio as the
-proxy is implemented.
+These programs are clients using Stolosio through Playwright's standard CDP API. They
+are executable examples and the end-to-end acceptance targets for `/v1/connect`.
 
-Set `STOLOSIO_CDP_URL` to the Stolosio WebSocket endpoint. For an explicit local browser
-route:
+Set `STOLOSIO_CDP_URL` to the Stolosio WebSocket endpoint. Without a provider override
+Stolosio uses the local Browserless fleet; name `browserless_cloud` for the paid cloud:
 
 ```bash
-export STOLOSIO_CDP_URL='ws://localhost:8411/v1/connect?stolosio.provider.slug=browserless'
+export STOLOSIO_CDP_URL='ws://localhost:8411/v1/connect'
+export STOLOSIO_CDP_URL='ws://localhost:8411/v1/connect?stolosio.provider.slug=browserless_cloud'
 ```
 
 Run each example from the repository root:
@@ -18,45 +18,22 @@ uv run python examples/01_goto_and_content.py
 uv run python examples/02_interaction.py
 uv run python examples/03_evaluate.py
 uv run python examples/04_debug_stream.py
-uv run python examples/05_no_browser_http_only.py
-uv run python examples/06_provider_transition.py
-uv run python examples/07_transition_replay.py
-uv run python examples/08_automatic_routing.py
 ```
 
-The examples intentionally use only the standard Playwright client. They contain no
-Stolosio-specific SDK code; switching between Stolosio routes requires changing only
-`STOLOSIO_CDP_URL`. Omitting `stolosio.provider.slug` selects Stolosio's automatic plan.
+The examples use only the standard Playwright client. Switching providers requires
+changing only `STOLOSIO_CDP_URL`.
 
 ## Targets
 
-- `01_goto_and_content.py` covers the initial no-browser-eligible command sequence.
-- `02_interaction.py` covers a command sequence that requires a browser provider.
-- `03_evaluate.py` covers JavaScript evaluation through the CDP connection.
+- `01_goto_and_content.py` navigates and reads the page content.
+- `02_interaction.py` clicks a link and waits for the next page.
+- `03_evaluate.py` evaluates JavaScript through the CDP connection.
 - `04_debug_stream.py` shows an opt-in client reference and the separate, read-only
-  DEBUG WebSocket alongside an ordinary Playwright CDP connection.
+  DEBUG WebSocket alongside an ordinary Playwright CDP connection. Set
+  `STOLOSIO_DEBUG_URL` when it isn't available at `ws://localhost:8411/v1/debug`.
 
-## No-browser validation
+The Docker E2E suite runs these same files, so a command that succeeds for a developer
+is the exact downstream workflow exercised by automated acceptance.
 
-The [adaptive transition milestone](../docs/roadmap/provider-transitions.md) includes
-three self-checking examples:
-
-- `05_no_browser_http_only.py` completes `goto` plus `content` on HTTP.
-- `06_provider_transition.py` observes an automatic session moving between two
-  providers and verifies the factual transition event.
-- `07_transition_replay.py` replays two acknowledged navigations in order and catches
-  up before the triggering evaluation runs.
-
-Example 05 explicitly selects HTTP. Examples 06 and 07 use automatic routing and
-require prepared support evidence whose cheapest provider cannot satisfy the later
-evaluation; set `STOLOSIO_E2E_TRANSITIONS=1` to include them in E2E runs.
-
-Examples 05 and 06 also observe the public DEBUG WebSocket to assert the factual
-attempt sequence. Set `STOLOSIO_DEBUG_URL` when it isn't available at
-`ws://localhost:8411/v1/debug`.
-
-The Docker E2E suite will run those same example files, so a command that succeeds for
-a developer is the exact downstream workflow exercised by automated acceptance.
-
-`08_automatic_routing.py` omits the provider override and prints the factual attempt and
-transition journey selected from Stolosio's domain support plan.
+For a single page, prefer `POST /v1/capture` (see [docs/CAPTURE.md](../docs/CAPTURE.md)):
+it chooses the capture method itself and returns the exact document.

@@ -9,7 +9,6 @@ from backend.db.models import (
     Domain,
     DomainProviderCostStat,
     GatewaySession,
-    HealthProbe,
     ProviderCommandCostStat,
     SessionDomain,
     SessionEventRecord,
@@ -17,7 +16,6 @@ from backend.db.models import (
 from backend.events import EventType, SessionEvent
 from backend.events.normalization import normalize_domain
 from backend.events.registry import OTHER_COMMAND_METHOD
-from backend.proxy.contracts import ProviderName
 
 _MAX_RETAINED_METHODS_PER_PROVIDER = 512
 _SESSION_OVERHEAD_METHOD = "__session_overhead__"
@@ -87,43 +85,16 @@ class EventRecorder:
     async def _project_events(self, events: list[SessionEvent]) -> None:
         if not events:
             return
-        session_ids = {str(event.session_id) for event in events}
-        async with self._sessions() as database:
-            probe_session_ids = set(
-                await database.scalars(
-                    select(GatewaySession.id)
-                    .join(
-                        HealthProbe,
-                        HealthProbe.id == GatewaySession.client_reference,
-                    )
-                    .where(GatewaySession.id.in_(session_ids))
-                )
-            )
-        ordinary_events = [
-            event
-            for event in events
-            if str(event.session_id) not in probe_session_ids
-        ]
-        probe_attempt_ids = {
-            str(event.attempt_id)
-            for event in events
-            if (
-                str(event.session_id) in probe_session_ids
-                and event.attempt_id is not None
-                and EventType(event.event_type) in _ATTEMPT_PROJECTION_EVENTS
-            )
-        }
-        attempt_domains = await self._project_domain_facts(ordinary_events)
+        attempt_domains = await self._project_domain_facts(events)
         summary_attempt_ids = {
             str(event.attempt_id)
-            for event in ordinary_events
+            for event in events
             if (
                 event.attempt_id is not None
                 and EventType(event.event_type) in _ATTEMPT_PROJECTION_EVENTS
             )
         }
         await self._project_attempts(attempt_domains, summary_attempt_ids)
-        await self._complete_probe_attempts(probe_attempt_ids)
 
     async def _project_domain_facts(
         self,
@@ -275,27 +246,6 @@ class EventRecorder:
                     if attempt.id in summary_attempt_ids:
                         await self._project_command_summary(database, attempt)
 
-    async def _complete_probe_attempts(self, attempt_ids: set[str]) -> None:
-        ordered_ids = sorted(attempt_ids)
-        for offset in range(0, len(ordered_ids), _ATTEMPT_PROJECTION_BATCH_SIZE):
-            batch_ids = ordered_ids[
-                offset : offset + _ATTEMPT_PROJECTION_BATCH_SIZE
-            ]
-            async with self._sessions.begin() as database:
-                attempts = list(
-                    await database.scalars(
-                        select(AcquisitionAttempt)
-                        .where(AcquisitionAttempt.id.in_(batch_ids))
-                        .order_by(AcquisitionAttempt.id)
-                        .with_for_update()
-                    )
-                )
-                for attempt in attempts:
-                    if attempt.finished_at is None:
-                        continue
-                    attempt.command_cost_projected = True
-                    attempt.command_summary = None
-
     @classmethod
     async def _project_command_summary(
         cls,
@@ -309,7 +259,6 @@ class EventRecorder:
         methods = summary.get("methods")
         if not isinstance(methods, dict):
             methods = {}
-        provider = ProviderName(attempt.provider)
         retained_methods = await cls._retained_command_methods(
             database,
             attempt.provider,
@@ -320,9 +269,7 @@ class EventRecorder:
             for usage in methods.values()
             if isinstance(usage, dict)
         )
-        browser_ms = (
-            0 if provider is ProviderName.HTTP else int(attempt.browser_connected_ms or 0)
-        )
+        browser_ms = int(attempt.browser_connected_ms or 0)
         chargeable_ms = int(attempt.chargeable_time_ms or 0)
         attributable_ms = min(browser_ms, total_provider_ms)
         modeled_cost = int(attempt.modeled_cost_units or 0)

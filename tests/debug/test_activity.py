@@ -116,7 +116,7 @@ async def test_activity_stream_filters_events_without_losing_sequence_position()
     ignored = SessionEvent.create(
         EventType.SESSION_OPEN,
         session_id,
-        provider=ProviderName.BROWSERBASE,
+        provider=ProviderName.BROWSERLESS_CLOUD,
     )
     matched = SessionEvent.create(
         EventType.ATTEMPT_FAILED,
@@ -222,12 +222,12 @@ def test_activity_filters_match_registered_event_contract() -> None:
     event = SessionEvent.create(
         EventType.NAVIGATION_FAILED,
         uuid4(),
-        provider=ProviderName.BROWSERBASE,
+        provider=ProviderName.BROWSERLESS_CLOUD,
         occurred_at=datetime.now(UTC),
     )
 
     assert ActivityEventFilters(
-        providers=(ProviderName.BROWSERBASE,),
+        providers=(ProviderName.BROWSERLESS_CLOUD,),
         families=(ActivityEventFamily.NAVIGATION,),
         outcomes=(ActivityEventOutcome.FAILURE,),
     ).matches(event)

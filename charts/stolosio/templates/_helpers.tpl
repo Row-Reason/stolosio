@@ -64,25 +64,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: {{ .Values.nats.jetstreamReplicas | quote }}
 {{- end }}
 
-{{- define "stolosio.browserbaseEnv" -}}
-- name: BROWSERBASE_NETWORK_ISOLATION_VERIFIED
-  value: {{ .Values.browserbase.networkIsolationVerified | quote }}
-- name: BROWSERBASE_API_URL
-  value: {{ .Values.browserbase.apiUrl | quote }}
-{{- with .Values.browserbase.existingSecret }}
-- name: BROWSERBASE_API_KEY
-  valueFrom:
-    secretKeyRef:
-      name: {{ . }}
-      key: {{ $.Values.browserbase.apiKeySecretKey }}
-- name: BROWSERBASE_PROJECT_ID
-  valueFrom:
-    secretKeyRef:
-      name: {{ . }}
-      key: {{ $.Values.browserbase.projectIdSecretKey }}
-{{- end }}
-{{- end }}
-
 {{- define "stolosio.browserlessCloudEnv" -}}
 - name: BROWSERLESS_CLOUD_URL
   value: {{ .Values.browserlessCloud.url | quote }}

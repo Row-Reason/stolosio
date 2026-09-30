@@ -58,22 +58,6 @@ def test_unknown_envelope_fields_and_versions_are_rejected() -> None:
         SessionEvent.from_json(json.dumps(raw))
 
 
-def test_transition_event_records_the_factual_transition() -> None:
-    event = SessionEvent.create(
-        EventType.EXECUTION_TRANSITIONED,
-        uuid4(),
-        provider=ProviderName.BROWSERLESS,
-        attempt_id=uuid4(),
-        payload={
-            "from_provider": "http",
-            "to_provider": "browserless",
-            "trigger_method": "Runtime.evaluate",
-        },
-    )
-
-    assert SessionEvent.from_json(event.to_json()) == event
-
-
 def test_historic_provider_disconnect_without_reason_remains_readable() -> None:
     event = SessionEvent.create(
         EventType.PROVIDER_DISCONNECTED,

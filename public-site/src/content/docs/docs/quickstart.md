@@ -7,7 +7,7 @@ description: Start Stolosio locally with Docker Compose and connect an existing 
 
 Install Docker with Docker Compose, Git, and [uv](https://docs.astral.sh/uv/getting-started/installation/). Use Python 3.13 or newer. Docker must be running.
 
-No paid credentials are needed for the local HTTP and Browserless paths.
+No paid credentials are needed for the local Browserless fleet or for page capture without challenge resolution.
 
 ## 1. Start the stack
 
@@ -34,7 +34,7 @@ Keep this process running. The API and fleet controller are separate processes: 
 
 Visit [localhost:5173](http://localhost:5173). The API listens on `http://localhost:8411`; the Docker fleet controller exposes metrics at `http://localhost:9101/metrics`.
 
-Inspect fleet policy, provider availability, and sessions in the admin interface. Fleet limits and routing policy are saved in PostgreSQL, not configured through session URLs.
+Inspect fleet policy, provider availability, and sessions in the admin interface. Fleet limits, cost rates, and the domain blocklist are saved in PostgreSQL, not configured through session URLs.
 
 ## 4. Run the example client
 

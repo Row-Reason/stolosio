@@ -9,56 +9,52 @@ platform.
 
 Stolosio aims to be a CDP-compatible browser gateway:
 
-> Change the browser endpoint, retain the automation, and gain browser routing and fleet
-> management.
+> Change the browser endpoint, retain the automation, and gain fleet management and
+> observability.
 
 A client already using Puppeteer, a CDP library, or Playwright's `connect_over_cdp()`
 should be able to replace its browser URL with a Stolosio URL and continue using its
-existing automation. The selected provider can then be changed through the URL or by a
-Stolosio routing policy:
+existing automation. The provider can then be changed through the URL:
 
 ```text
 wss://stolosio.example/v1/connect
-wss://stolosio.example/v1/connect?stolosio.provider.slug=http
 wss://stolosio.example/v1/connect?stolosio.provider.slug=browserless
-wss://stolosio.example/v1/connect?stolosio.provider.slug=browserbase
+wss://stolosio.example/v1/connect?stolosio.provider.slug=browserless_cloud
 ```
+
+Clients that only need a page's content use `POST /v1/capture`, which chooses between
+plain HTTP and a browser render by itself.
 
 Stolosio will target the common 80 percent of browser automation behavior across all
 providers. Provider-specific and uncommon commands may not work everywhere initially,
 but unsupported behavior must fail explicitly and predictably rather than hang or
 silently produce an incorrect result.
 
-Native browser providers relay CDP without method-by-method mappings. The bounded HTTP
-facade supports only its explicitly documented bootstrap surface and escalates an
-automatic session to a browser for every other operation.
+Native browser providers relay CDP without method-by-method mappings.
 
 ## Initial providers
 
-Stolosio begins with three acquisition paths:
+Stolosio begins with two browser providers:
 
-- Plain HTTP provides bounded navigation and content retrieval without occupying a
-  browser.
 - Browserless provides native CDP through a Stolosio-managed, horizontally scalable
-  fleet with explicit per-instance session capacity.
-- Browserbase provides native CDP as the externally managed terminal fallback for
-  difficult sites, with Stolosio-owned concurrency and queue limits.
+  fleet with explicit per-instance session capacity. It is the default.
+- Browserless cloud provides native CDP through paid, externally managed stealth
+  browsers behind residential proxies, with Stolosio-owned concurrency and queue
+  limits. Clients select it explicitly when a task requires it.
 
-The provider is an implementation detail for clients that remain within Stolosio's
-portable capability surface. Clients may still select a provider explicitly when a task
-requires its particular performance, compatibility, or stealth characteristics.
+Page capture adds plain HTTP retrieval through Stolosio's egress proxy, rendering only
+when HTTP is not enough.
 
 ## Initial scope
 
 Stolosio will:
 
 - Provide clients with isolated browser sessions.
-- Route sessions to explicitly selected providers or an automatic selection policy.
+- Connect sessions to the provider they name, defaulting to the managed fleet.
 - Pack isolated sessions into compatible browser instances and scale managed provider
   fleets from measured demand.
 - Expose per-provider demand, capacity, health, and scaling metrics.
 - Preserve opaque native CDP passthrough for browser providers.
-- Report operations outside the bounded HTTP facade explicitly.
 - Own session authentication, authorization, lifecycle, and cleanup.
 
 Browser processes are local Docker Compose dependencies during development. Stolosio
@@ -70,12 +66,9 @@ controller. Docker, Kubernetes, or another runtime supplies the compute primitiv
 Stolosio will later:
 
 - Learn to optimize browser placement and resource usage from historical data.
-- Build revisable domain-level routing knowledge from historical session observations.
-- Select providers based on capabilities, queue pressure, cost, performance, and past
-  success.
 - Provide a standardized live debugging stream across providers.
 - Provide a web interface for fleet monitoring and session debugging.
-- Make provider health, compatibility, and scaling behavior observable over time.
+- Make provider compatibility, cost, and scaling behavior observable over time.
 
 ## Design principles
 

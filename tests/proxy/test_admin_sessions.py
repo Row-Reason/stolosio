@@ -31,7 +31,7 @@ def test_session_routes_parse_filters_and_return_read_models() -> None:
 
     page = client.get(
         "/v1/admin/sessions",
-        params={"search": "abc", "state": "closed", "provider": "http"},
+        params={"search": "abc", "state": "closed", "provider": "browserless"},
     )
     detail = client.get("/v1/admin/sessions/session-1")
 
@@ -39,7 +39,7 @@ def test_session_routes_parse_filters_and_return_read_models() -> None:
     assert page.json() == {"sessions": [], "next_cursor": None}
     assert queries.filters.search == "abc"
     assert queries.filters.state == "closed"
-    assert queries.filters.provider == "http"
+    assert queries.filters.provider == "browserless"
     assert detail.json() == {"id": "session-1", "state": "closed"}
 
 

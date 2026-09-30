@@ -7,7 +7,6 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 from websockets.asyncio.client import connect
@@ -21,7 +20,6 @@ pytestmark = [
         reason="set STOLOSIO_E2E=1 with the Docker Compose stack running",
     ),
 ]
-LOCAL_E2E_PROVIDERS = [ProviderName.HTTP, ProviderName.BROWSERLESS]
 
 
 def stolosio_url(provider: ProviderName) -> str:
@@ -30,10 +28,11 @@ def stolosio_url(provider: ProviderName) -> str:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", LOCAL_E2E_PROVIDERS)
-async def test_goto_and_content(provider: ProviderName) -> None:
+async def test_goto_and_content() -> None:
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.connect_over_cdp(stolosio_url(provider))
+        browser = await playwright.chromium.connect_over_cdp(
+            stolosio_url(ProviderName.BROWSERLESS)
+        )
         page = await browser.new_page()
         response = await page.goto("https://example.com")
 
@@ -43,17 +42,13 @@ async def test_goto_and_content(provider: ProviderName) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", LOCAL_E2E_PROVIDERS)
-async def test_interaction(provider: ProviderName) -> None:
+async def test_interaction() -> None:
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.connect_over_cdp(stolosio_url(provider))
+        browser = await playwright.chromium.connect_over_cdp(
+            stolosio_url(ProviderName.BROWSERLESS)
+        )
         page = await browser.new_page()
         await page.goto("https://example.com")
-        if provider is ProviderName.HTTP:
-            with pytest.raises(PlaywrightError):
-                await page.locator("a").click()
-            await browser.close()
-            return
         await page.locator("a").click()
         await page.wait_for_load_state()
 
@@ -62,24 +57,20 @@ async def test_interaction(provider: ProviderName) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", LOCAL_E2E_PROVIDERS)
-async def test_evaluate(provider: ProviderName) -> None:
+async def test_evaluate() -> None:
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.connect_over_cdp(stolosio_url(provider))
+        browser = await playwright.chromium.connect_over_cdp(
+            stolosio_url(ProviderName.BROWSERLESS)
+        )
         page = await browser.new_page()
         await page.goto("https://example.com")
 
-        if provider is ProviderName.HTTP:
-            with pytest.raises(PlaywrightError):
-                await page.evaluate("document.querySelector('h1').textContent")
-            await browser.close()
-            return
         assert await page.evaluate("document.title") == "Example Domain"
         await browser.close()
 
 
 @pytest.mark.asyncio
-async def test_omitted_provider_uses_automatic_plan() -> None:
+async def test_omitted_provider_uses_the_local_fleet() -> None:
     base = os.getenv("STOLOSIO_E2E_URL", "ws://localhost:8411/v1/connect")
     async with async_playwright() as playwright:
         browser = await playwright.chromium.connect_over_cdp(base)
@@ -91,90 +82,21 @@ async def test_omitted_provider_uses_automatic_plan() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    os.getenv("STOLOSIO_E2E_TRANSITIONS") != "1",
-    reason="prepare multi-provider eligibility evidence and set STOLOSIO_E2E_TRANSITIONS=1",
-)
-async def test_runtime_transition_replays_all_prior_navigations() -> None:
-    base = os.getenv("STOLOSIO_E2E_URL", "ws://localhost:8411/v1/connect")
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.connect_over_cdp(base)
-        page = await browser.new_page()
-        await page.goto("https://example.com/?stolosio-replay=first")
-        assert "Example Domain" in await page.content()
-        await page.goto("https://example.com/?stolosio-replay=second")
-        assert "Example Domain" in await page.content()
-
-        state = await page.evaluate(
-            "({search: location.search, historyLength: history.length, "
-            "heading: document.querySelector('h1').textContent})"
-        )
-
-        assert state == {
-            "search": "?stolosio-replay=second",
-            "historyLength": state["historyLength"],
-            "heading": "Example Domain",
-        }
-        assert state["historyLength"] >= 3
-        await browser.close()
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "example",
-    ["05_no_browser_http_only.py"],
+    ["01_goto_and_content.py", "02_interaction.py", "03_evaluate.py"],
 )
-async def test_no_browser_example_programs(example: str) -> None:
+async def test_example_programs(example: str) -> None:
     root = Path(__file__).parents[2]
     environment = os.environ.copy()
-    environment["STOLOSIO_CDP_URL"] = stolosio_url(ProviderName.HTTP)
+    environment["STOLOSIO_CDP_URL"] = os.getenv(
+        "STOLOSIO_E2E_URL", "ws://localhost:8411/v1/connect"
+    )
     process = await asyncio.create_subprocess_exec(
         sys.executable,
         str(root / "examples" / example),
         cwd=root,
         env=environment,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await process.communicate()
-
-    assert process.returncode == 0, (stdout + stderr).decode()
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(
-    os.getenv("STOLOSIO_E2E_TRANSITIONS") != "1",
-    reason="prepare multi-provider eligibility evidence and set STOLOSIO_E2E_TRANSITIONS=1",
-)
-@pytest.mark.parametrize(
-    "example",
-    ["06_provider_transition.py", "07_transition_replay.py"],
-)
-async def test_provider_transition_examples(example: str) -> None:
-    root = Path(__file__).parents[2]
-    environment = os.environ.copy()
-    environment["STOLOSIO_CDP_URL"] = os.getenv("STOLOSIO_E2E_URL", "ws://localhost:8411/v1/connect")
-    process = await asyncio.create_subprocess_exec(
-        sys.executable,
-        str(root / "examples" / example),
-        cwd=root,
-        env=environment,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await process.communicate()
-
-    assert process.returncode == 0, (stdout + stderr).decode()
-
-
-@pytest.mark.asyncio
-async def test_automatic_routing_example_program() -> None:
-    root = Path(__file__).parents[2]
-    process = await asyncio.create_subprocess_exec(
-        sys.executable,
-        str(root / "examples" / "08_automatic_routing.py"),
-        cwd=root,
-        env=os.environ.copy(),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )

@@ -1,8 +1,8 @@
 # Stolosio
 
 Stolosio is a browser and web-acquisition gateway. It gives CDP-compatible automation
-clients one endpoint across a bounded HTTP path, a Stolosio-managed Browserless fleet,
-and quota-controlled Browserbase capacity.
+clients one endpoint for a Stolosio-managed Browserless fleet and quota-controlled
+Browserless cloud capacity.
 
 `POST /v1/capture` returns a page's content as a person would receive it, or a failure
 that says why, choosing plain HTTP, a render on the managed fleet, or paid challenge
@@ -11,10 +11,10 @@ resolution by itself ([Page capture](docs/CAPTURE.md)).
 It is for teams building browser automation, scraping, testing, and web-data systems
 that want to change providers without rewriting downstream automation. Stolosio owns
 session admission, provider queues, managed browser fleets, observations, and
-eventually cost-aware acquisition planning.
+per-provider cost accounting.
 
 Native browser traffic is opaque CDP passthrough. Stolosio owns admission, capacity,
-session lifecycle, observations, and routing; the selected browser remains the
+session lifecycle, and observations; the named provider's browser remains the
 authority on individual CDP methods.
 
 ## Status
@@ -23,8 +23,8 @@ Experimental and intended for local development or trusted networks. There is no
 application authentication: do not expose the browser or administrative endpoints to
 the internet. See [Security](SECURITY.md) for the deployment boundary.
 
-The current providers are HTTP, Browserless, and optional paid Browserbase. Automatic
-sessions can escalate from HTTP to a browser when needed. Multi-tenant operation and
+The current providers are the local Browserless fleet (the default) and optional paid
+Browserless cloud, used only when a session names it. Multi-tenant operation and
 production compatibility guarantees are not currently supported.
 
 ## Design decisions
@@ -35,8 +35,8 @@ production compatibility guarantees are not currently supported.
   observations without putting messaging on the admission path.
 - Fleet reconciliation runs separately from the API. A session consumes capacity,
   while acquisition attempts receive browser slots.
-- Native CDP traffic preserves browser semantics. The HTTP path supports a deliberately
-  small command set and escalates when it cannot execute a command correctly.
+- Native CDP traffic preserves browser semantics. A session stays on the provider it
+  connected to; only page capture chooses between plain HTTP and a browser render.
 
 See [Architecture](docs/ARCHITECTURE.md) for the boundaries and tradeoffs.
 
@@ -52,9 +52,9 @@ uv sync --locked
 docker compose up --build -d
 ```
 
-No paid credentials are needed for the local HTTP and Browserless paths. `.env` is
-optional; use [.env.example](.env.example) for supported overrides. Fleet limits and
-routing policy are managed in the UI, not environment variables.
+No paid credentials are needed for the local Browserless path. `.env` is optional; use
+[.env.example](.env.example) for supported overrides. Fleet limits, cost rates, and the
+domain blocklist are managed in the UI, not environment variables.
 
 The Stolosio admin UI is available at `http://localhost:5173` by default. Set
 `STOLOSIO_ADMIN_PORT` to publish it on a different host port.
@@ -77,14 +77,12 @@ browser = await playwright.chromium.connect_over_cdp(
 )
 ```
 
-Browserbase is never used by automatic routing unless the session explicitly opts in:
+Paid Browserless cloud is used only when a session names it and an operator has enabled
+its capacity (it also needs `BROWSERLESS_CLOUD_TOKEN`):
 
 ```text
-ws://localhost:8411/v1/connect?stolosio.provider.allow_paid_fallback=true
+ws://localhost:8411/v1/connect?stolosio.provider.slug=browserless_cloud
 ```
-
-Even with that opt-in, Stolosio exhausts its local HTTP/Browserless plan before using
-the paid fallback.
 
 Run the examples and checks:
 
@@ -124,8 +122,6 @@ The publishing workflow targets `ghcr.io/elei-io/stolosio` and
 - [Page capture](docs/CAPTURE.md)
 - [Provider matrix](docs/PROVIDERS.md)
 - [DEBUG stream](docs/DEBUG.md)
-- [No-browser execution](docs/NO_BROWSER.md)
-- [Deterministic domain routing](docs/ANALYTICS.md)
 - [Global domain blocking](docs/NETWORK_POLICY.md)
 - [Roadmap](docs/ROADMAP.md)
 - [CI and releases](docs/RELEASING.md)

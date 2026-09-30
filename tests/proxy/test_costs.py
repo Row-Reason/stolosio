@@ -55,13 +55,13 @@ async def test_cost_overview_uses_finalized_attempts_and_provider_time_bases(
                     id="00000000-0000-0000-0000-000000000012",
                     session_id="00000000-0000-0000-0000-000000000002",
                     ordinal=1,
-                    provider="browserbase",
+                    provider="browserless_cloud",
                     resolved_settings={},
                     setting_sources={},
                     state="failed",
                     finished_at=now - timedelta(minutes=30),
+                    capacity_occupied_ms=60_000,
                     browser_connected_ms=5_000,
-                    estimated_billable_ms=60_000,
                     chargeable_time_ms=60_000,
                     modeled_cost_units=120,
                 ),
@@ -78,11 +78,10 @@ async def test_cost_overview_uses_finalized_attempts_and_provider_time_bases(
         "chargeable_time_ms": 72_000,
         "browser_connected_time_ms": 15_000,
         "browserless_slot_time_ms": 12_000,
-        "browserbase_billable_time_ms": 60_000,
     }
     assert [row["provider"] for row in value["providers"]] == [
-        "browserbase",
         "browserless",
+        "browserless_cloud",
     ]
     assert value["recent_sessions"][0]["modeled_cost_units"] == 120
     assert value["buckets"]

@@ -14,7 +14,7 @@ from backend.proxy.external_capacity import (
 class FakeExternalCapacity:
     def __init__(self) -> None:
         self.value = ExternalCapacity(
-            provider=ProviderName.HTTP,
+            provider=ProviderName.BROWSERLESS_CLOUD,
             enabled=True,
             max_active_sessions=100,
             max_queued_attempts=100,
@@ -23,7 +23,7 @@ class FakeExternalCapacity:
         self.actor: str | None = None
 
     async def update(self, provider, values, *, actor):
-        if provider is not ProviderName.HTTP:
+        if provider is not ProviderName.BROWSERLESS_CLOUD:
             return None
         self.actor = actor
         self.value = replace(
@@ -34,7 +34,7 @@ class FakeExternalCapacity:
         return self.value
 
 
-def test_admin_can_update_http_capacity() -> None:
+def test_admin_can_update_browserless_cloud_capacity() -> None:
     app = FastAPI()
     capacity = FakeExternalCapacity()
     app.state.external_capacity = capacity
@@ -42,24 +42,24 @@ def test_admin_can_update_http_capacity() -> None:
 
     with TestClient(app) as client:
         response = client.patch(
-            "/v1/admin/providers/http/capacity",
+            "/v1/admin/providers/browserless_cloud/capacity",
             json={"max_active_sessions": 12, "max_queued_attempts": 24},
             headers={"X-Stolosio-Actor": "test-operator"},
         )
 
     assert response.status_code == 200
-    assert response.json()["provider"] == "http"
+    assert response.json()["provider"] == "browserless_cloud"
     assert response.json()["max_active_sessions"] == 12
     assert response.json()["max_queued_attempts"] == 24
     assert capacity.actor == "test-operator"
 
 
-def test_missing_browserbase_api_key_is_returned_as_a_clear_conflict() -> None:
+def test_missing_browserless_cloud_token_is_returned_as_a_clear_conflict() -> None:
     class MissingCredentialsCapacity(FakeExternalCapacity):
         async def update(self, provider, values, *, actor):
             raise ExternalCapacityEnablementError(
-                "Cannot enable Browserbase because its API key is not configured. "
-                "Configure browserbase_api_key and restart Stolosio."
+                "Cannot enable Browserless cloud because its token is not configured. "
+                "Configure browserless_cloud_token and restart Stolosio."
             )
 
     app = FastAPI()
@@ -68,14 +68,14 @@ def test_missing_browserbase_api_key_is_returned_as_a_clear_conflict() -> None:
 
     with TestClient(app) as client:
         response = client.patch(
-            "/v1/admin/providers/browserbase/capacity",
+            "/v1/admin/providers/browserless_cloud/capacity",
             json={"enabled": True},
         )
 
     assert response.status_code == 409
     assert response.json() == {
         "detail": (
-            "Cannot enable Browserbase because its API key is not configured. "
-            "Configure browserbase_api_key and restart Stolosio."
+            "Cannot enable Browserless cloud because its token is not configured. "
+            "Configure browserless_cloud_token and restart Stolosio."
         )
     }

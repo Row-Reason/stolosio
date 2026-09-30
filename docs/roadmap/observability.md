@@ -7,8 +7,8 @@ browser activity. These facts support the DEBUG stream, operational metrics, dur
 history, and future analytics without placing observation delivery on the admission
 path.
 
-This layer records what happened. It does not diagnose a session, recommend a provider,
-or make routing decisions.
+This layer records what happened. It does not diagnose a session or recommend a
+provider.
 
 ## System shape
 
@@ -101,9 +101,7 @@ The recorder maintains factual projections for:
   browser time, and attributed cost. Method identity is capped per provider, with
   overflow folded into `__other__`.
 
-These projections contain no confidence scores or recommendations. Their future use is
-described in [ANALYTICS.md](../ANALYTICS.md) and no-browser policy is described in
-[NO_BROWSER.md](../NO_BROWSER.md).
+These projections contain no confidence scores or recommendations.
 
 ## Privacy boundary
 
@@ -183,5 +181,4 @@ See [DEBUG.md](../DEBUG.md) for the observation and redaction contract.
   administrative activity feed separately supports a filtered cross-session tail.
 - Public authentication, authorization scopes, and resumable cursors are not implemented.
 - Metrics are scaling and operational signals, not domain analytics.
-- The planner uses bounded factual projections; DEBUG events remain observations rather
-  than routing recommendations.
+- DEBUG events remain observations rather than provider recommendations.

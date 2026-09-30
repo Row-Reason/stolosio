@@ -8,11 +8,9 @@ import {
   CircleAlert,
   CircleDot,
   Clock3,
-  Globe2,
   LoaderCircle,
   RefreshCw,
   Server,
-  ShieldCheck,
   Waves,
 } from "lucide-react"
 import { useMemo } from "react"
@@ -27,7 +25,6 @@ import type {
   ActivityEventPage,
   ActivityProvider,
   CommandCostStat,
-  DomainPage,
   GatewayFleetSnapshot,
   ProviderFleetSnapshot,
 } from "@/types/api"
@@ -43,8 +40,6 @@ type SystemStatus = {
 }
 
 const providerLabels: Record<ActivityProvider, string> = {
-  http: "HTTP",
-  browserbase: "Browserbase",
   browserless_cloud: "Browserless cloud",
   browserless: "Browserless",
 }
@@ -249,11 +244,6 @@ export function OverviewPage({ navigate }: OverviewPageProps) {
     queryFn: () => apiRequest<ActivityEventPage>("/v1/admin/events?limit=30"),
     refetchInterval: 10_000,
   })
-  const domains = useQuery({
-    queryKey: ["overview-domains"],
-    queryFn: () => apiRequest<DomainPage>("/v1/admin/domains?limit=5"),
-    refetchInterval: 30_000,
-  })
   const commandCosts = useQuery({
     queryKey: ["command-costs"],
     queryFn: () =>
@@ -336,14 +326,12 @@ export function OverviewPage({ navigate }: OverviewPageProps) {
     void gateway.refetch()
     void fleets.refetch()
     void activity.refetch()
-    void domains.refetch()
     void commandCosts.refetch()
   }
   const isRefreshing =
     gateway.isFetching ||
     fleets.isFetching ||
     activity.isFetching ||
-    domains.isFetching ||
     commandCosts.isFetching
 
   return (
@@ -596,7 +584,7 @@ export function OverviewPage({ navigate }: OverviewPageProps) {
         </section>
       </div>
 
-      <div className="mt-5 grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+      <div className="mt-5">
         <section className="overflow-hidden rounded-lg border bg-card">
           <div className="flex items-start justify-between gap-3 border-b px-4 py-3">
             <div>
@@ -675,115 +663,6 @@ export function OverviewPage({ navigate }: OverviewPageProps) {
           )}
         </section>
 
-        <section className="overflow-hidden rounded-lg border bg-card">
-          <div className="flex items-start justify-between gap-3 border-b px-4 py-3">
-            <div>
-              <h2 className="font-semibold">Domain routing</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Current health and runtime eligibility.
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 text-muted-foreground"
-              onClick={() => navigate("/domains")}
-            >
-              View
-              <ArrowRight className="size-3.5" aria-hidden />
-            </Button>
-          </div>
-          {domains.isLoading ? (
-            <div className="flex min-h-64 items-center justify-center">
-              <LoaderCircle
-                className="size-5 animate-spin text-muted-foreground"
-                aria-hidden
-              />
-            </div>
-          ) : domains.error ? (
-            <SectionError
-              error={domains.error}
-              retry={() => void domains.refetch()}
-            />
-          ) : (
-            <div className="p-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <Globe2
-                    className="size-4 text-muted-foreground"
-                    aria-hidden
-                  />
-                  <p className="mt-3 text-xl font-semibold">
-                    {numberFormatter.format(
-                      domains.data?.summary.known_domains ?? 0
-                    )}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Known domains
-                  </p>
-                </div>
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <ShieldCheck
-                    className="size-4 text-muted-foreground"
-                    aria-hidden
-                  />
-                  <p className="mt-3 text-xl font-semibold">
-                    {numberFormatter.format(
-                      domains.data?.summary.healthy_domains ?? 0
-                    )}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">Healthy</p>
-                </div>
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <LoaderCircle
-                    className="size-4 text-muted-foreground"
-                    aria-hidden
-                  />
-                  <p className="mt-3 text-xl font-semibold">
-                    {numberFormatter.format(
-                      domains.data?.summary.checking_domains ?? 0
-                    )}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">Checking</p>
-                </div>
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <Activity
-                    className="size-4 text-muted-foreground"
-                    aria-hidden
-                  />
-                  <p className="mt-3 text-xl font-semibold">
-                    {numberFormatter.format(
-                      domains.data?.summary.transitioned_domains ?? 0
-                    )}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Transitioned
-                  </p>
-                </div>
-              </div>
-              {(domains.data?.summary.unhealthy_domains ?? 0) > 0 && (
-                <button
-                  type="button"
-                  className="mt-4 flex w-full items-center justify-between rounded-md border border-amber-500/20 bg-amber-500/5 p-3 text-left"
-                  onClick={() => navigate("/domains")}
-                >
-                  <span className="flex items-center gap-2 text-sm">
-                    <AlertTriangle
-                      className="size-4 text-amber-600"
-                      aria-hidden
-                    />
-                    {domains.data?.summary.unhealthy_domains ?? 0} domains need
-                    review
-                  </span>
-                  <ArrowRight
-                    className="size-4 text-muted-foreground"
-                    aria-hidden
-                  />
-                </button>
-              )}
-            </div>
-          )}
-        </section>
       </div>
 
       <section className="mt-5 overflow-hidden rounded-lg border bg-card">
@@ -871,7 +750,7 @@ export function OverviewPage({ navigate }: OverviewPageProps) {
               No browser time attributed yet
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Browserless and Browserbase command totals will appear after
+              Provider command totals will appear after
               attempts complete.
             </p>
           </div>

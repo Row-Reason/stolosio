@@ -46,17 +46,8 @@ migrations as a pre-install and pre-upgrade Helm Job and retains a successful Jo
 creates and continuously reconciles its own streams and consumers. When it creates a
 fresh event stream, it reconstructs the retained event window from PostgreSQL.
 
-Optional Browserbase credentials are also read from an existing Secret:
-
-```yaml
-browserbase:
-  existingSecret: stolosio-browserbase
-  apiKeySecretKey: api-key
-  projectIdSecretKey: project-id
-```
-
 The Browserless cloud token (for `/v1/capture`'s challenge resolution and the
-`browserless_cloud` provider) is read the same way:
+`browserless_cloud` provider) is read from an existing Secret:
 
 ```yaml
 browserlessCloud:
@@ -102,7 +93,7 @@ Loki data sources at the top; namespace and release scope follow the Helm releas
 Kubernetes panels require kubelet and kube-state-metrics; logs require Loki with a
 `namespace` label. Resource and log panels cover the release namespace; use a dedicated
 namespace. Provider filters affect provider-specific panels; gateway, command-domain
-latency, transitions, event delivery and resources retain their documented global scope.
+latency, event delivery and resources retain their documented global scope.
 
 Shared database gauges use the maximum across API replicas, not their sum. Counters
 and histogram buckets aggregate process-local rates. Empty traffic produces no success

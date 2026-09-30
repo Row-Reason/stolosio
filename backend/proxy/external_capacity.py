@@ -33,17 +33,10 @@ class ExternalCapacityRepository:
         self,
         sessions: async_sessionmaker[AsyncSession],
         *,
-        browserbase_api_key: str | None = None,
         browserless_cloud_token: str | None = None,
     ) -> None:
         self._sessions = sessions
         self._credentials = {
-            ProviderName.BROWSERBASE: (
-                "Browserbase",
-                "API key",
-                "browserbase_api_key",
-                browserbase_api_key,
-            ),
             ProviderName.BROWSERLESS_CLOUD: (
                 "Browserless cloud",
                 "token",

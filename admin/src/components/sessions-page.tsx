@@ -6,7 +6,6 @@ import {
   CircleDot,
   Clock3,
   Coins,
-  ExternalLink,
   LoaderCircle,
   Search,
   Settings2,
@@ -38,8 +37,6 @@ import type {
 } from "@/types/api"
 
 const providerLabels: Record<ActivityProvider, string> = {
-  http: "HTTP",
-  browserbase: "Browserbase",
   browserless_cloud: "Browserless cloud",
   browserless: "Browserless",
 }
@@ -441,8 +438,12 @@ function SessionDetailView({
         />
         <MetricCard
           icon={Settings2}
-          label="Selection"
-          value={`${session.selection_mode} · ${humanize(session.selection_reason)}`}
+          label="Providers"
+          value={
+            [...new Set(session.providers)]
+              .map((provider) => providerLabels[provider])
+              .join(", ") || "—"
+          }
         />
         <MetricCard
           icon={Clock3}
@@ -453,11 +454,6 @@ function SessionDetailView({
           icon={Clock3}
           label="Capacity occupied"
           value={formatMilliseconds(session.total_capacity_occupied_ms)}
-        />
-        <MetricCard
-          icon={Coins}
-          label="Estimated billable"
-          value={formatMilliseconds(session.estimated_billable_ms)}
         />
       </div>
 
@@ -515,22 +511,6 @@ function SessionDetailView({
                     <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
                       <div>
                         <p className="text-xs text-muted-foreground">
-                          Selection
-                        </p>
-                        <p className="mt-1 capitalize">
-                          {humanize(attempt.selection_reason)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          Transition trigger
-                        </p>
-                        <p className="mt-1 capitalize">
-                          {humanize(attempt.transition_trigger)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">
                           Modeled cost
                         </p>
                         <p className="mt-1">
@@ -582,14 +562,6 @@ function SessionDetailView({
                             : `${attempt.cost_rate_units_per_second} units/s`}
                         </p>
                       </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          Estimated billable
-                        </p>
-                        <p className="mt-1">
-                          {formatMilliseconds(attempt.estimated_billable_ms)}
-                        </p>
-                      </div>
                     </div>
                     {attempt.resolved_setting_keys.length > 0 && (
                       <div className="mt-4 flex flex-wrap gap-1.5">
@@ -634,11 +606,6 @@ function SessionDetailView({
                               label: "After last command",
                               value:
                                 attempt.phase_summary.post_last_command_ms,
-                            },
-                            {
-                              label: "Transition replay",
-                              value:
-                                attempt.phase_summary.transition_replay_ms,
                             },
                             {
                               label: "Provider bootstrap",
@@ -701,15 +668,12 @@ function SessionDetailView({
             <CardContent className="space-y-2">
               {session.domains.length ? (
                 session.domains.map((domain) => (
-                  <Button
+                  <p
                     key={domain.id}
-                    variant="outline"
-                    className="w-full justify-between"
-                    onClick={() => navigate(`/domains/${domain.id}`)}
+                    className="truncate rounded-md border px-3 py-2 text-sm"
                   >
-                    <span className="truncate">{domain.hostname}</span>
-                    <ExternalLink className="size-3.5" />
-                  </Button>
+                    {domain.hostname}
+                  </p>
                 ))
               ) : (
                 <p className="text-sm text-muted-foreground">

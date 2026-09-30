@@ -6,4 +6,3 @@ class StolosioBrowserlessSetting(BaseStolosioSetting[BrowserlessSettingSchema]):
     slug = "browserless"
     query_prefix = "stolosio.browserless"
     schema = BrowserlessSettingSchema
-    automatic = False

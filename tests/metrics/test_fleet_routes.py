@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from backend.api.routes.fleet import router as fleet_router
 from backend.api.routes.metrics import router as metrics_router
 from backend.metrics import GatewayFleetSnapshot, ProviderFleetSnapshot
-from backend.metrics.instrumentation import metric_method, metric_reason, transition_trigger
+from backend.metrics.instrumentation import metric_method, metric_reason
 from backend.proxy.contracts import ACTIVE_PROVIDERS, ProviderName
 
 
@@ -54,7 +54,7 @@ def test_json_and_prometheus_views_share_the_fleet_snapshot() -> None:
         "capacity": 100,
     }
     assert response.status_code == 200
-    assert len(response.json()) == 4
+    assert len(response.json()) == len(ACTIVE_PROVIDERS)
     browserless = next(
         snapshot for snapshot in response.json() if snapshot["provider"] == "browserless"
     )
@@ -89,9 +89,6 @@ def test_metric_labels_map_unregistered_values_to_other() -> None:
     assert metric_method("Secret.customCommand") == "other"
     assert metric_reason("provider_unavailable") == "provider_unavailable"
     assert metric_reason("private exception details") == "other"
-    assert transition_trigger("Runtime.evaluate") == "new_requirement"
-    assert transition_trigger("http_transport_failure") == "http_safety"
-    assert transition_trigger("private trigger") == "other"
 
 
 def test_fleet_routes_fail_closed_when_postgres_is_unavailable() -> None:

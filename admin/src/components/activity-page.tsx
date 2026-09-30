@@ -44,8 +44,6 @@ type ActivityPageProps = {
 }
 
 const providers: { label: string; value: ActivityProvider }[] = [
-  { label: "HTTP", value: "http" },
-  { label: "Browserbase", value: "browserbase" },
   { label: "Browserless", value: "browserless" },
   { label: "Browserless cloud", value: "browserless_cloud" },
 ]
@@ -69,7 +67,6 @@ const eventTypes = [
   "console.message",
   "javascript.exception",
   "provider.disconnected",
-  "execution.transitioned",
   "capture.completed",
 ] as const
 
@@ -100,7 +97,6 @@ const operationalEventTypes: ActivityEventType[] = [
   "navigation.failed",
   "page.crashed",
   "provider.disconnected",
-  "execution.transitioned",
   "capture.completed",
 ]
 
@@ -304,24 +300,20 @@ function statusLabel(status: StreamStatus, paused: boolean) {
 function eventTone(event: ActivityEvent) {
   if (event.outcome === "failure") return "text-rose-300"
   if (event.outcome === "interrupted") return "text-amber-300"
-  if (event.event_type === "execution.transitioned") return "text-violet-300"
   if (event.event_family === "navigation") return "text-sky-300"
   if (event.event_family === "session") return "text-emerald-300"
   return "text-slate-300"
 }
 
 function providerTone(provider: ActivityProvider | null) {
-  if (provider === "browserbase") return "text-violet-300"
   if (provider === "browserless_cloud") return "text-fuchsia-300"
   if (provider === "browserless") return "text-cyan-300"
-  if (provider === "http") return "text-amber-200"
   return "text-slate-500"
 }
 
 function outcomeGlyph(event: ActivityEvent) {
   if (event.outcome === "failure") return "×"
   if (event.outcome === "interrupted") return "!"
-  if (event.event_type === "execution.transitioned") return "↳"
   if (event.outcome === "success") return "✓"
   return "·"
 }

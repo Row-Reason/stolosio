@@ -1,6 +1,6 @@
 # Stolosio admin
 
-The operator interface for fleet policy, routing, sessions and observations.
+The operator interface for fleets, capacity, network and cost policy, sessions and observations.
 This is separate from the public marketing/documentation site. It has no built-in
 authentication; deploy behind your trusted access layer.
 

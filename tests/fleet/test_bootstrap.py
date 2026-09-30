@@ -12,6 +12,6 @@ def test_every_browser_provider_has_a_bootstrap_configuration() -> None:
     assert set(MANAGED_FLEETS) == {
         ProviderName.BROWSERLESS,
     }
-    assert ProviderName.HTTP not in MANAGED_FLEETS
+    assert ProviderName.BROWSERLESS_CLOUD not in MANAGED_FLEETS
     assert configurations[0].session_capacity_per_instance == 5
     assert configurations[0].max_queued_attempts == 100

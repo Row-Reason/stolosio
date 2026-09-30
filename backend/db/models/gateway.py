@@ -198,9 +198,6 @@ class GatewaySession(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     terminal_reason: Mapped[str | None] = mapped_column(String(64))
-    health_evaluated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), index=True
-    )
 
 
 class AcquisitionAttempt(Base):
@@ -249,7 +246,6 @@ class AcquisitionAttempt(Base):
     capacity_occupied_ms: Mapped[int | None] = mapped_column(BigInteger)
     browser_connected_ms: Mapped[int | None] = mapped_column(BigInteger)
     provider_reported_ms: Mapped[int | None] = mapped_column(BigInteger)
-    estimated_billable_ms: Mapped[int | None] = mapped_column(BigInteger)
     chargeable_time_ms: Mapped[int | None] = mapped_column(BigInteger)
     cost_basis: Mapped[str | None] = mapped_column(String(32))
     cost_rate_units_per_second: Mapped[int | None] = mapped_column(BigInteger)
@@ -257,11 +253,6 @@ class AcquisitionAttempt(Base):
     domain_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("domains.id", ondelete="SET NULL"), index=True
     )
-    selection_reason: Mapped[str | None] = mapped_column(String(32))
-    plan_version: Mapped[int | None]
-    plan_position: Mapped[int | None]
-    transition_trigger: Mapped[str | None] = mapped_column(String(64))
-    estimated_cost_units: Mapped[int | None] = mapped_column(BigInteger)
     modeled_cost_units: Mapped[int | None] = mapped_column(BigInteger)
     command_summary: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB(none_as_null=True)

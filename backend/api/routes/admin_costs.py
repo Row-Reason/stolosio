@@ -1,7 +1,8 @@
+from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 
 from backend.proxy.contracts import ProviderName
 
@@ -16,7 +17,6 @@ class CostTotalsResponse(BaseModel):
     chargeable_time_ms: int
     browser_connected_time_ms: int
     browserless_slot_time_ms: int
-    browserbase_billable_time_ms: int
 
 
 class ProviderCostResponse(BaseModel):
@@ -28,7 +28,6 @@ class ProviderCostResponse(BaseModel):
     chargeable_time_ms: int
     browser_connected_time_ms: int
     capacity_occupied_time_ms: int
-    estimated_billable_time_ms: int
 
 
 class CostBucketResponse(BaseModel):
@@ -66,3 +65,31 @@ async def cost_overview(
 ) -> CostOverviewResponse:
     value = await request.app.state.costs.overview(window)
     return CostOverviewResponse.model_validate(value)
+
+
+class CostRateResponse(BaseModel):
+    provider: ProviderName
+    cost_units_per_second: int
+    updated_at: datetime
+
+
+class CostRateUpdate(BaseModel):
+    cost_units_per_second: int = Field(ge=0)
+
+
+@router.get("/rates", response_model=list[CostRateResponse])
+async def list_cost_rates(request: Request) -> list[CostRateResponse]:
+    rows = await request.app.state.cost_rates.list()
+    return [CostRateResponse.model_validate(row, from_attributes=True) for row in rows]
+
+
+@router.patch("/rates/{provider}", response_model=CostRateResponse)
+async def update_cost_rate(
+    provider: ProviderName,
+    update: CostRateUpdate,
+    request: Request,
+) -> CostRateResponse:
+    row = await request.app.state.cost_rates.update(provider, update.cost_units_per_second)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Unknown provider cost rate")
+    return CostRateResponse.model_validate(row, from_attributes=True)

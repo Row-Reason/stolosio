@@ -68,23 +68,18 @@ async def test_command_and_navigation_events_are_correlated_and_sanitized() -> N
 
 
 @pytest.mark.asyncio
-async def test_unsupported_and_interrupted_commands_get_terminal_events() -> None:
+async def test_interrupted_commands_get_terminal_events() -> None:
     publisher = CapturingPublisher()
-    observer = CdpEventObserver(uuid4(), uuid4(), ProviderName.BROWSERBASE, publisher)
-    await observer.command_received({"id": 1, "method": "Page.printToPDF"})
-    await observer.command_unsupported(1)
+    observer = CdpEventObserver(uuid4(), uuid4(), ProviderName.BROWSERLESS_CLOUD, publisher)
     await observer.command_received({"id": 2, "method": "Runtime.evaluate"})
     await observer.interrupt_pending("session_ended")
     await observer.flush_command_summaries()
 
     assert [event.event_type for event in publisher.events] == [
-        "command.failed",
         "command.interrupted",
         "command.summary",
     ]
-    assert publisher.events[0].payload["cdp_error_code"] == -32601
-    assert publisher.events[1].payload["reason"] == "session_ended"
-    assert publisher.events[-1].payload["methods"]["Page.printToPDF"]["failed_count"] == 1
+    assert publisher.events[0].payload["reason"] == "session_ended"
     assert publisher.events[-1].payload["methods"]["Runtime.evaluate"]["interrupted_count"] == 1
 
 
@@ -116,39 +111,9 @@ async def test_attempt_phase_summary_measures_command_union_without_retaining_co
         "no_command_in_flight_ms": 4_000,
         "pre_first_command_ms": 2_000,
         "post_last_command_ms": 2_000,
-        "transition_replay_ms": 0,
         "provider_bootstrap_ms": 0,
         "provider_close_ms": 0,
     }
-
-
-@pytest.mark.asyncio
-async def test_attempt_phase_summary_moves_pending_command_to_transition_target(
-) -> None:
-    observed_times = iter((0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 7.0))
-    publisher = CapturingPublisher()
-    source_attempt_id = uuid4()
-    target_attempt_id = uuid4()
-    observer = CdpEventObserver(
-        uuid4(),
-        source_attempt_id,
-        ProviderName.HTTP,
-        publisher,
-        clock=lambda: next(observed_times),
-    )
-
-    await observer.command_received({"id": 1, "method": "Runtime.callFunctionOn"})
-    observer.command_forwarded({"id": 1, "method": "Runtime.callFunctionOn"})
-    observer.start_attempt_phase(ProviderName.BROWSERLESS, target_attempt_id)
-    observer.record_attempt_phase(target_attempt_id, "transition_replay_ms", 1_000)
-    observer.bind_attempt(ProviderName.BROWSERLESS, target_attempt_id)
-    await observer.upstream_message('{"id":1,"result":{}}')
-
-    target = observer.phase_summary(target_attempt_id)
-    assert target is not None
-    assert target["observed_session_ms"] == 4_000
-    assert target["command_active_ms"] == 2_000
-    assert target["transition_replay_ms"] == 1_000
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,6 @@ from backend.db.models import (
     GatewaySession,
     SessionDomain,
 )
-from backend.proxy.contracts import ProviderName
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,11 +180,6 @@ class SessionQueryService:
                     "provider_instance_id": attempt.provider_instance_id,
                     "provider_session_id": attempt.provider_session_id,
                     "state": attempt.state,
-                    "selection_reason": attempt.selection_reason,
-                    "transition_trigger": attempt.transition_trigger,
-                    "plan_version": attempt.plan_version,
-                    "plan_position": attempt.plan_position,
-                    "estimated_cost_units": attempt.estimated_cost_units,
                     "modeled_cost_units": attempt.modeled_cost_units,
                     "chargeable_time_ms": attempt.chargeable_time_ms,
                     "cost_basis": attempt.cost_basis,
@@ -204,7 +198,6 @@ class SessionQueryService:
                     "capacity_occupied_ms": attempt.capacity_occupied_ms,
                     "browser_connected_ms": attempt.browser_connected_ms,
                     "provider_reported_ms": attempt.provider_reported_ms,
-                    "estimated_billable_ms": attempt.estimated_billable_ms,
                     "phase_summary": attempt.phase_summary,
                     "terminal_reason": attempt.terminal_reason,
                 }
@@ -227,22 +220,6 @@ class SessionQueryService:
             "duration_seconds": _duration_seconds(session),
             "terminal_reason": session.terminal_reason,
             "providers": [attempt.provider for attempt in attempts],
-            "selection_mode": (
-                "explicit"
-                if any(
-                    source == "explicit"
-                    for attempt in attempts
-                    for source in attempt.setting_sources.values()
-                )
-                else "automatic"
-            ),
-            "selection_reason": next(
-                (attempt.selection_reason for attempt in attempts if attempt.selection_reason),
-                None,
-            ),
-            "transition_triggers": [
-                attempt.transition_trigger for attempt in attempts if attempt.transition_trigger
-            ],
             "modeled_cost_units": sum(
                 attempt.modeled_cost_units or 0 for attempt in attempts
             ),
@@ -251,15 +228,10 @@ class SessionQueryService:
                 if attempt.provider_reported_ms is not None
                 else attempt.browser_connected_ms or 0
                 for attempt in attempts
-                if attempt.provider != ProviderName.HTTP.value
             ),
             "total_capacity_occupied_ms": sum(
                 attempt.capacity_occupied_ms or 0
                 for attempt in attempts
-                if attempt.provider != ProviderName.HTTP.value
-            ),
-            "estimated_billable_ms": sum(
-                attempt.estimated_billable_ms or 0 for attempt in attempts
             ),
             "domains": [{"id": domain_id, "hostname": hostname} for domain_id, hostname in domains],
         }

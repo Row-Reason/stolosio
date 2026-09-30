@@ -23,13 +23,6 @@ nats:
 migration:
   ttlSecondsAfterFinished: 86400
 
-browserbase:
-  networkIsolationVerified: false
-  apiUrl: https://api.browserbase.com/v1
-  existingSecret: ""
-  apiKeySecretKey: api-key
-  projectIdSecretKey: project-id
-
 browserlessCloud:
   url: https://production-sfo.browserless.io
   proxyCountry: jp
@@ -56,9 +49,6 @@ admin:
 
 maintenance:
   metricsPort: 9000
-  resources: {}
-
-health:
   resources: {}
 
 fleetController:

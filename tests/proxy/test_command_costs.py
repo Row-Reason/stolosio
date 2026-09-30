@@ -47,7 +47,7 @@ async def test_command_cost_query_orders_browser_time_and_filters_overhead(
                     last_seen_at=now,
                 ),
                 ProviderCommandCostStat(
-                    provider="browserbase",
+                    provider="browserless_cloud",
                     method="Page.navigate",
                     command_count=2,
                     failed_count=0,

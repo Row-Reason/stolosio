@@ -34,15 +34,14 @@ The API health response reports NATS and JetStream state. A healthy API response
 
 ## Common symptoms
 
-| Symptom                                   | Check next                                                                                                  |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Connection refused                        | Verify the API process, published port, and client URL.                                                     |
-| Browser acquisition stays queued          | Check the controller process, ready slots, maximum instances, and provider queue limits.                    |
-| HTTP returns an unsupported-command error | Check for forced HTTP selection; use automatic routing or a browser provider for that command.              |
-| Paid fallback is not attempted            | Check credentials, enabled capacity, the session opt-in, and whether local candidates have been exhausted.  |
-| Browser connection closes early           | Inspect the recorded reason and provider session timeout. Do not assume every disconnect is a client error. |
-| Activity feed is unavailable              | Check NATS and JetStream connectivity and the maintenance worker. PostgreSQL remains authoritative.         |
-| Kubernetes workers are not Ready          | Inspect Pod events, image-pull access, architecture, resources, and probe failures.                         |
+| Symptom                              | Check next                                                                                                  |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Connection refused                   | Verify the API process, published port, and client URL.                                                     |
+| Browser acquisition stays queued     | Check the controller process, ready slots, maximum instances, and provider queue limits.                    |
+| Browserless cloud session is refused | Check the token, enabled provider capacity, and its active-session and queue limits.                        |
+| Browser connection closes early      | Inspect the recorded reason and provider session timeout. Do not assume every disconnect is a client error. |
+| Activity feed is unavailable         | Check NATS and JetStream connectivity and the maintenance worker. PostgreSQL remains authoritative.         |
+| Kubernetes workers are not Ready     | Inspect Pod events, image-pull access, architecture, resources, and probe failures.                         |
 
 ## Metrics
 

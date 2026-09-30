@@ -35,7 +35,7 @@ export default defineConfig({
         {
           label: "Operate",
           items: [
-            { label: "Fleet & routing", slug: "docs/operations" },
+            { label: "Fleet & policy", slug: "docs/operations" },
             { label: "Observe & troubleshoot", slug: "docs/observability" },
             { label: "Maintenance & upgrades", slug: "docs/maintenance" },
           ],

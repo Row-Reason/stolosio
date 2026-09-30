@@ -12,7 +12,6 @@ from backend.db.models import (
     Domain,
     DomainProviderCostStat,
     GatewaySession,
-    HealthProbe,
     ProviderCommandCostStat,
     SessionEventRecord,
 )
@@ -185,76 +184,6 @@ async def test_recorder_is_idempotent_and_projects_domain_evidence(
 
 
 @pytest.mark.asyncio
-async def test_http_command_summary_never_attributes_browser_time(
-    database_sessions: async_sessionmaker[AsyncSession],
-) -> None:
-    session_id = uuid4()
-    attempt_id = uuid4()
-    now = datetime.now(UTC)
-    await add_session(database_sessions, session_id)
-    async with database_sessions.begin() as database:
-        database.add(
-            AcquisitionAttempt(
-                id=str(attempt_id),
-                session_id=str(session_id),
-                ordinal=1,
-                provider="http",
-                resolved_settings={},
-                setting_sources={},
-                state="closed",
-                finished_at=now,
-                browser_connected_ms=100,
-                chargeable_time_ms=100,
-                modeled_cost_units=2,
-                command_summary={
-                    "methods": {
-                        "Page.navigate": {
-                            "count": 1,
-                            "failed_count": 0,
-                            "duration_ms": 80,
-                            "provider_latency_ms": 75,
-                            "stolosio_queue_ms": 5,
-                        }
-                    }
-                },
-            )
-        )
-    summary = SessionEvent.create(
-        EventType.COMMAND_SUMMARY,
-        session_id,
-        provider=ProviderName.HTTP,
-        attempt_id=attempt_id,
-        occurred_at=now,
-        payload={
-            "methods": {
-                "Page.navigate": {
-                    "count": 1,
-                    "failed_count": 0,
-                    "duration_ms": 80,
-                    "provider_latency_ms": 75,
-                    "stolosio_queue_ms": 5,
-                }
-            }
-        },
-    )
-
-    assert await EventRecorder(database_sessions).record([summary]) == 1
-
-    async with database_sessions() as database:
-        rows = list(
-            await database.scalars(
-                select(ProviderCommandCostStat).order_by(ProviderCommandCostStat.method)
-            )
-        )
-    assert [(row.method, row.attributed_browser_time_ms) for row in rows] == [
-        ("Page.navigate", 0),
-        ("__session_overhead__", 0),
-    ]
-    assert rows[0].attributed_cost_units == 0
-    assert rows[1].attributed_cost_units == 2
-
-
-@pytest.mark.asyncio
 async def test_terminal_outbox_redelivery_projects_stored_command_summary(
     database_sessions: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -418,7 +347,7 @@ async def test_recorder_commits_raw_events_before_starting_projections(
     event = SessionEvent.create(
         EventType.NAVIGATION_RESPONSE,
         session_id,
-        provider=ProviderName.HTTP,
+        provider=ProviderName.BROWSERLESS,
         payload={"url": "https://example.com/", "status": 200},
     )
     observed_persisted_event = False
@@ -460,7 +389,7 @@ async def test_recorder_redelivery_recovers_after_projection_phase_failure(
                 id=str(attempt_id),
                 session_id=str(session_id),
                 ordinal=1,
-                provider="http",
+                provider="browserless",
                 resolved_settings={},
                 setting_sources={},
                 state="completed",
@@ -473,7 +402,7 @@ async def test_recorder_redelivery_recovers_after_projection_phase_failure(
     navigation = SessionEvent.create(
         EventType.NAVIGATION_RESPONSE,
         session_id,
-        provider=ProviderName.HTTP,
+        provider=ProviderName.BROWSERLESS,
         attempt_id=attempt_id,
         occurred_at=now,
         payload={"url": "https://example.com/", "status": 200},
@@ -481,7 +410,7 @@ async def test_recorder_redelivery_recovers_after_projection_phase_failure(
     terminal = SessionEvent.create(
         EventType.ATTEMPT_CLOSED,
         session_id,
-        provider=ProviderName.HTTP,
+        provider=ProviderName.BROWSERLESS,
         attempt_id=attempt_id,
         occurred_at=now,
     )
@@ -551,7 +480,7 @@ async def test_same_domain_projection_does_not_deadlock_attempt_finalization(
                     id=str(attempt_id),
                     session_id=str(session_id),
                     ordinal=1,
-                    provider="http",
+                    provider="browserless",
                     resolved_settings={},
                     setting_sources={},
                     state="active",
@@ -564,7 +493,7 @@ async def test_same_domain_projection_does_not_deadlock_attempt_finalization(
                     attempt_id=str(attempt_id),
                     session_id=str(session_id),
                     ordinal=ordinal + 1,
-                    provider=ProviderName.HTTP,
+                    provider=ProviderName.BROWSERLESS,
                     state=AttemptState.ACTIVE,
                 )
             )
@@ -572,7 +501,7 @@ async def test_same_domain_projection_does_not_deadlock_attempt_finalization(
                 SessionEvent.create(
                     EventType.NAVIGATION_RESPONSE,
                     session_id,
-                    provider=ProviderName.HTTP,
+                    provider=ProviderName.BROWSERLESS,
                     attempt_id=attempt_id,
                     occurred_at=now,
                     payload={
@@ -639,90 +568,6 @@ async def test_recorder_keeps_preselection_events_providerless(
 
 
 @pytest.mark.asyncio
-async def test_recorder_keeps_probe_sessions_out_of_domain_projections(
-    database_sessions: async_sessionmaker[AsyncSession],
-) -> None:
-    source_session_id = uuid4()
-    probe_session_id = uuid4()
-    probe_id = str(uuid4())
-    now = datetime.now(UTC)
-    await add_session(database_sessions, source_session_id)
-    await add_session(database_sessions, probe_session_id)
-    async with database_sessions.begin() as database:
-        domain = Domain(
-            hostname="source.test",
-            first_seen_at=now,
-            last_seen_at=now,
-            session_count=1,
-        )
-        database.add(domain)
-        await database.flush()
-        candidate = await database.get(
-            GatewaySession,
-            str(probe_session_id),
-        )
-        assert candidate is not None
-        candidate.client_reference = probe_id
-        database.add(
-            HealthProbe(
-                id=probe_id,
-                domain_id=domain.id,
-                source_session_id=str(source_session_id),
-                candidate_provider="http",
-                trigger="manual",
-                target_url="https://candidate.test/",
-                state="running",
-                created_at=now,
-            )
-        )
-
-    recorder = EventRecorder(database_sessions)
-    navigation = SessionEvent.create(
-        EventType.NAVIGATION_RESPONSE,
-        probe_session_id,
-        provider=ProviderName.HTTP,
-        occurred_at=now,
-        payload={"url": "https://candidate.test/", "status": 200},
-    )
-    command = SessionEvent.create(
-        EventType.COMMAND_SUMMARY,
-        probe_session_id,
-        provider=ProviderName.HTTP,
-        attempt_id=uuid4(),
-        occurred_at=now,
-        payload={
-            "methods": {
-                "Runtime.callFunctionOn": {
-                    "count": 1,
-                    "failed_count": 0,
-                    "duration_ms": 1,
-                    "provider_latency_ms": 1,
-                    "stolosio_queue_ms": 0,
-                }
-            }
-        },
-    )
-
-    assert await recorder.record([navigation, command]) == 2
-
-    async with database_sessions() as database:
-        candidate_domain = await database.scalar(
-            select(Domain).where(Domain.hostname == "candidate.test")
-        )
-        command_cost_count = await database.scalar(
-            select(func.count()).select_from(ProviderCommandCostStat)
-        )
-        event_count = await database.scalar(
-            select(func.count())
-            .select_from(SessionEventRecord)
-            .where(SessionEventRecord.session_id == str(probe_session_id))
-        )
-    assert candidate_domain is None
-    assert command_cost_count == 0
-    assert event_count == 2
-
-
-@pytest.mark.asyncio
 async def test_fleet_snapshot_includes_every_provider_and_only_live_leases(
     database_sessions: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -751,9 +596,7 @@ async def test_fleet_snapshot_includes_every_provider_and_only_live_leases(
     snapshots = await FleetSnapshotService(database_sessions, Settings()).snapshot()
 
     assert [snapshot.provider.value for snapshot in snapshots] == [
-        "http",
         "browserless",
-        "browserbase",
         "browserless_cloud",
     ]
     browserless = next(

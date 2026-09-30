@@ -9,12 +9,14 @@ description: Understand the gateway, durable state, observation delivery, and se
 CDP client
     │ /v1/connect
     ▼
-Stolosio API → planning and admission → acquisition attempt
-                                          │
-                         HTTP / Browserless / Browserbase
+Stolosio API → admission → acquisition attempt
+                                 │
+                 Browserless / Browserless cloud
 ```
 
-The API owns HTTP/WebSocket transport and application lifecycle. The proxy domain owns planning, settings resolution, admission, provider adapters, session lifecycle, and protocol transport.
+The API owns HTTP/WebSocket transport and application lifecycle. The proxy domain owns settings resolution, admission, provider adapters, session lifecycle, and protocol transport. A session connects to the provider it names, or to the managed Browserless fleet by default, and stays there.
+
+`POST /v1/capture` shares the same admission and capacity. It chooses its own method: plain HTTP through the egress proxy when that proves enough, otherwise a render on the managed fleet.
 
 ## Durable state
 
@@ -32,7 +34,7 @@ Healthy, ready, non-draining browser instances expose session slots. Stolosio co
 
 Lifecycle events enter a transactional outbox. Admission does not wait on messaging. NATS Core carries live coordination; JetStream supports durable observation delivery and replay. PostgreSQL retains authoritative history. Stolosio has no Redis dependency.
 
-DEBUG carries filtered facts, not routing recommendations. Routing conclusions are separate policy state.
+DEBUG carries filtered facts, not diagnoses or provider recommendations.
 
 ## Contribute
 
