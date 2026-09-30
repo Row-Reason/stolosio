@@ -1,11 +1,14 @@
 """End-to-end check of the capture service on labelled URLs: outcome agreement with the labels, and where time goes.
 
     uv run python benchmarks/capture.py run data/labels.csv results/capture.jsonl [--sample 300]
+    uv run python benchmarks/capture.py run data/labels.csv results/deployed.jsonl --endpoint http://stolosio:8411
     uv run python benchmarks/capture.py report results/capture.jsonl
 
 Each URL gets a full production capture (plain HTTP, classification, managed render, comparison) with an empty
 method cache, so every HTML page is rendered (the worst case for time), and resolve_bot_challenges=False (the
-paid tier is measured by benchmarks/challenge.py). The expected outcome comes from the audited label:
+paid tier is measured by benchmarks/challenge.py). With --endpoint, captures go through a deployed service instead:
+its own fleet, egress and shared method cache, so pages it has seen before may skip the render. The expected outcome
+comes from the audited label:
 
 - a reason that ends a capture (404, login wall, bot challenge, ...) -> that failure;
 - otherwise (usable, or content missing that a browser adds) -> captured.
@@ -21,7 +24,7 @@ import random
 import statistics
 from collections import Counter
 
-from _harness import quantile, run_jsonl
+from _harness import Endpoint, quantile, run_jsonl
 
 from pagecapture import CaptureRequest, CaptureService
 from pagecapture.cache import MemoryMethodCache
@@ -54,13 +57,17 @@ def expected(row: dict) -> str:
     return "captured"
 
 
-async def run(rows: list[dict], out: str, parallel: int) -> None:
-    service = CaptureService(Settings(), cache=MemoryMethodCache())
+async def run(rows: list[dict], out: str, parallel: int, endpoint: str | None) -> None:
+    service = Endpoint(endpoint) if endpoint else CaptureService(Settings(), cache=MemoryMethodCache())
 
     async def one(row: dict) -> dict:
-        loop = asyncio.get_running_loop()
-        t0 = loop.time()
-        res = (await service.capture(CaptureRequest(url=row["url"]))).to_json(include_body=False)
+        if isinstance(service, Endpoint):
+            res, _, wall = await service.capture(row["url"], resolve_bot_challenges=False)
+        else:
+            loop = asyncio.get_running_loop()
+            t0 = loop.time()
+            res = (await service.capture(CaptureRequest(url=row["url"]))).to_json(include_body=False)
+            wall = loop.time() - t0
         return {
             "url": row["url"],
             "expected": expected(row),
@@ -84,7 +91,7 @@ async def run(rows: list[dict], out: str, parallel: int) -> None:
                 for a in res["evidence"]["attempts"]
             ],
             "cost": res["evidence"]["cost"],
-            "wall_s": round(loop.time() - t0, 2),
+            "wall_s": round(wall, 2),
         }
 
     await run_jsonl(
@@ -173,13 +180,14 @@ def main() -> None:
     r.add_argument("out")
     r.add_argument("--sample", type=int, default=300)
     r.add_argument("--parallel", type=int, default=4)
+    r.add_argument("--endpoint", help="a deployed capture service's base URL (default: in-process)")
     p = sub.add_parser("report")
     p.add_argument("results")
     args = parser.parse_args()
     if args.command == "run":
         rows = list(csv.DictReader(open(args.labels)))
         random.Random(11).shuffle(rows)
-        asyncio.run(run(rows[: args.sample], args.out, args.parallel))
+        asyncio.run(run(rows[: args.sample], args.out, args.parallel, args.endpoint))
     else:
         report(args.results)
 

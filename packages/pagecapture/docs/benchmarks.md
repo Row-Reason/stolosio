@@ -1,6 +1,7 @@
 # Benchmarks
 
-All numbers from 2026-09-29, fetched from a Japanese IP. Reproduce with the commands below.
+All numbers from 2026-09-29, fetched from a Japanese IP, unless marked as the deployed service. Reproduce with the
+commands below.
 
 ## Classification (`benchmarks/classify.py`)
 
@@ -167,6 +168,58 @@ unverified plain responses when the render comes out empty).
 CPU per capture (300 stored pages, no network): classification median 24 ms (p90 134 ms), comparison under 2 ms
 (one 3 s outlier on a huge page). About 60% of classification time
 is BeautifulSoup building the tree, which the comparison reuses. Network time dominates by two orders of magnitude.
+
+## Deployed service (2026-09-30)
+
+The end-to-end and challenge benchmarks rerun against Stolosio's `POST /v1/capture` in production (release
+`a8e8b56`), so the numbers are what callers get: its Browserless fleet, fetch-proxy egress (not Japan), user agent
+`StolosioBot`, and the shared Postgres method cache. The fleet was also serving Periplus's crawl at the time, and
+Browserless cloud (BrowserQL, residential proxy) was the challenge tier. `--endpoint` sends each capture to the
+service; a 503 capacity refusal is waited out and not counted.
+
+```bash
+uv run python benchmarks/capture.py run data/labels.csv results/deployed_capture.jsonl --endpoint http://stolosio:8411
+uv run python benchmarks/challenge.py run data/challenge_benchmark_urls.tsv results/deployed_challenge.jsonl \
+    --endpoint http://stolosio:8411
+```
+
+End to end, the same 300 URLs:
+
+| | In-process (2026-09-29) | Deployed |
+|---|---|---|
+| captured vs failed agrees with the label | 96.7% (290/300) | 92.3% (277/300) |
+| … and with the labelled failure reason | 96.0% (288/300) | 91.3% (274/300) |
+| labelled usable or renderable → captured | 196/205 | 187/205 |
+| labelled blocked or broken → failed | 94/95 | 90/95 |
+| rendered pages whose plain response already held ≥95% | 101/185 | 90/176 |
+| whole capture | median 5.7 s, p90 15.1 s | median 4.4 s, p90 13.6 s |
+| browser render | median 6.8 s, p90 15.3 s | median 5.5 s, p90 13.1 s |
+
+279 of the 300 URLs give the same result as the in-process run. The 21 that differ move both ways and are about who
+is asking: 9 pages now challenge or deny `StolosioBot` from this egress, and 6 challenged or rate-limited before but
+capture now. 2 were transient `unreachable` answers that captured on a retry, and 4 fail with a different code
+(3 challenges now read as block pages, one 5xx). The method cache let 5 pages skip the render (the in-process run
+started empty).
+
+Challenge resolution, the same 84 pages (78 went to the challenge tier; baseline 79):
+
+| | Challenges (47) | Block pages (31) | All (78) | Baseline (79) |
+|---|---|---|---|---|
+| captured, real content | 32 | 22 | 54 (69%) | 60 (76%) |
+| a true answer from the site (404, 5xx, login wall, paywall) | 6 | 0 | 6 (8%) | 7 (9%) |
+| rendered but still empty (`incomplete_content`) | 3 | 0 | 3 (4%) | 0 |
+| protection held (`bot_blocked`, `bot_challenge`) | 5 | 7 | 12 (15%) | 11 (14%) |
+| the tier couldn't load the page (`browser_unavailable`) | 1 | 2 | 3 (4%) | 1 (1%) |
+
+Challenge-tier time: median 36 s, p90 69 s (baseline 40 s / 98 s: fewer round trips from Europe than from Japan).
+66 of 84 pages agree with the baseline. The residential proxy now gets past Cricinfo and Lowe's (Akamai), and no
+longer past Crunchbase and ScienceDirect, where BrowserQL's captcha solving timed out at 60 s. One run per page is
+noisy here: dl.acm.org came back `incomplete_content` (the page dropped content while scrolling) and was captured in
+full on a single retry.
+
+A capture failed once with HTTP 500: a Postgres deadlock while admitting the attempt under concurrent Periplus
+traffic. Periplus defers such an answer without spending an attempt, but admission should not return 500 for a
+transient conflict.
 
 ## Unseen sites (`results/unknown_sites.csv`)
 
