@@ -1,0 +1,106 @@
+{
+  "schema": "2",
+  "reference": "3f0c7a52-6f7e-4d8e-9f64-0d1c2b6a9e11",
+  "outcome": "captured",
+  "requested_url": "https://news.example.test/articles/42",
+  "final_url": "https://news.example.test/articles/42/",
+  "started_at": "2026-09-30T09:12:03.120Z",
+  "finished_at": "2026-09-30T09:12:27.201Z",
+  "response": {
+    "status_code": 200,
+    "headers": [
+      [
+        "content-type",
+        "text/html; charset=utf-8"
+      ],
+      [
+        "set-cookie",
+        "a=1"
+      ],
+      [
+        "set-cookie",
+        "b=2"
+      ]
+    ],
+    "redirects": [
+      {
+        "status": 301,
+        "url": "https://news.example.test/articles/42",
+        "location": "/articles/42/"
+      }
+    ]
+  },
+  "document": {
+    "representation": "rendered_html",
+    "media_type": "text/html",
+    "charset": "utf-8",
+    "content_sha256": "7d36daea7edea1a09a177574b9ca14501cd5bd3a0057f57d28243e1d9d8746e7",
+    "content_bytes": 95,
+    "body_base64": "PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PHRpdGxlPkFydGljbGUgNDI8L3RpdGxlPjwvaGVhZD48Ym9keT48bWFpbj4uLi48L21haW4+PC9ib2R5PjwvaHRtbD4="
+  },
+  "failure": null,
+  "evidence": {
+    "attempts": [
+      {
+        "path": "http",
+        "tier": "direct",
+        "status_code": 200,
+        "duration_ms": 612.0,
+        "assessment": {
+          "primary": "app_shell",
+          "reasons": [
+            {
+              "code": "app_shell",
+              "confidence": 0.9,
+              "source": "rule"
+            }
+          ],
+          "completeness": "empty",
+          "confidence": 0.9
+        },
+        "decision": "escalate",
+        "decision_reason": "app_shell: content missing without a browser",
+        "steps": [],
+        "notes": [],
+        "comparison": null
+      },
+      {
+        "path": "browser",
+        "tier": "managed",
+        "status_code": 200,
+        "duration_ms": 23600.0,
+        "assessment": {
+          "primary": null,
+          "reasons": [],
+          "completeness": "complete",
+          "confidence": 0.9
+        },
+        "decision": "accept",
+        "decision_reason": "rendered content is complete (plain response had 12% of it)",
+        "steps": [
+          {
+            "step": "parsed",
+            "t": 0.9,
+            "new_lines": 12,
+            "new_items": 0
+          }
+        ],
+        "notes": [],
+        "comparison": {
+          "http_coverage": 0.12,
+          "http_sufficient": false
+        }
+      }
+    ],
+    "cost": {
+      "browser_seconds": 23.6,
+      "paid": false,
+      "bytes": 2874983
+    },
+    "versions": {
+      "pagecapture": "0.2.0",
+      "classifier": "rules",
+      "renderer": "adaptive-4"
+    }
+  }
+}

@@ -93,6 +93,7 @@ export type ActivityProvider =
   | "http"
   | "browserless"
   | "browserbase"
+  | "browserless_cloud"
 
 export type StolosioSessionState =
   | "requested"
@@ -231,7 +232,7 @@ export type FleetConfigurationUpdate = {
 }
 
 export type ExternalProviderCapacity = {
-  provider: "http" | "browserbase"
+  provider: "http" | "browserbase" | "browserless_cloud"
   enabled: boolean
   max_active_sessions: number
   max_queued_attempts: number

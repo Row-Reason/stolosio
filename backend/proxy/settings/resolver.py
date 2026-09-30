@@ -57,6 +57,7 @@ class StolosioSettingsResolver:
             provider=models["provider"],
             session=models["session"],
             sources=sources,
+            browserless=models["browserless"],
         )
 
 

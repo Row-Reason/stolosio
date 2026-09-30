@@ -17,7 +17,14 @@ dependencies = [
     "uvicorn[standard]>=0.51.0",
     "websockets>=16.1",
     "prometheus-client>=0.25.0",
+    "pagecapture",
 ]
+
+[tool.uv.workspace]
+members = ["packages/pagecapture"]
+
+[tool.uv.sources]
+pagecapture = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -27,7 +34,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "packages/pagecapture/tests"]
 pythonpath = ["."]
 markers = ["e2e: requires the running Docker Compose stack"]
 

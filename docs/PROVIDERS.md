@@ -1,12 +1,13 @@
 # Providers
 
-Stolosio has three active acquisition providers:
+Stolosio has four active acquisition providers:
 
 | Provider | Role | Capacity owner |
 | --- | --- | --- |
 | HTTP | Bounded no-browser navigation and HTML retrieval | Stolosio admission |
 | Browserless | Default browser path and Stolosio-managed horizontal fleet | Stolosio instances and slots |
 | Browserbase | Premium external browser path for difficult sites | Stolosio's configured external quota |
+| Browserless cloud (`browserless_cloud`) | Paid stealth browsers behind residential proxies: on `/v1/connect` when a client names it, and as `/v1/capture`'s challenge-resolution tier | Stolosio's configured external quota |
 
 Browserless and Browserbase expose Chrome DevTools Protocol. Stolosio treats their CDP
 traffic as opaque protocol transport: it preserves command IDs, session IDs, event
@@ -35,6 +36,13 @@ mirror a subscription allowance or be set lower as a cost guardrail. Stolosio ap
 the limit transactionally before creating a Browserbase session. For automatic
 routing, capacity alone is not permission to spend: the session must also include
 `stolosio.provider.allow_paid_fallback=true`.
+
+Browserless cloud is never chosen automatically. A `/v1/connect` client names it with
+`stolosio.provider.slug=browserless_cloud` and may pick the residential exit country with
+`stolosio.browserless.proxy_country` (default `BROWSERLESS_CLOUD_PROXY_COUNTRY`, `jp`). It is
+disabled until an operator enables it, which needs `BROWSERLESS_CLOUD_TOKEN`; its concurrent-session
+limit (seeded at 15, the Prototyping plan's) bounds both endpoints. Cloud browsers sit outside
+Stolosio's egress firewall, so the network policy is applied in the browser.
 
 ## Promotion and escalation
 

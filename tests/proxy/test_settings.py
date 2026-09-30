@@ -56,6 +56,7 @@ def test_registry_exposes_the_canonical_query_contract() -> None:
             "stolosio.session.reference",
             "stolosio.session.browser_required",
             "stolosio.session.admission_timeout_ms",
+            "stolosio.browserless.proxy_country",
         }
     )
 

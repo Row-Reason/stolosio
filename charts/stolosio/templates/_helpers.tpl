@@ -83,6 +83,20 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- end }}
 
+{{- define "stolosio.browserlessCloudEnv" -}}
+- name: BROWSERLESS_CLOUD_URL
+  value: {{ .Values.browserlessCloud.url | quote }}
+- name: BROWSERLESS_CLOUD_PROXY_COUNTRY
+  value: {{ .Values.browserlessCloud.proxyCountry | quote }}
+{{- with .Values.browserlessCloud.existingSecret }}
+- name: BROWSERLESS_CLOUD_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ . }}
+      key: {{ $.Values.browserlessCloud.tokenSecretKey }}
+{{- end }}
+{{- end }}
+
 {{- define "stolosio.commonPodSpec" -}}
 {{- with .Values.imagePullSecrets }}
 imagePullSecrets:

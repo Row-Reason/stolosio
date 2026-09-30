@@ -50,6 +50,7 @@ const admissionProviderLabels: Record<
 > = {
   http: "Direct HTTP",
   browserbase: "Browserbase",
+  browserless_cloud: "Browserless cloud",
 }
 
 const numberFormatter = new Intl.NumberFormat()
@@ -983,8 +984,8 @@ function ExternalCapacityForm({
         </div>
         <div className="mt-6 flex items-center justify-between border-t pt-5">
           <p className="text-xs text-muted-foreground">
-            {capacity.provider === "browserbase"
-              ? "Stolosio controls admission only; Browserbase controls instances."
+            {capacity.provider !== "http"
+              ? `Stolosio controls admission only; ${admissionProviderLabels[capacity.provider]} controls instances.`
               : "Stolosio enforces this limit before starting direct HTTP work."}
           </p>
           <Button
@@ -1046,7 +1047,7 @@ function ExternalCapacityDetail({
           {admissionProviderLabels[capacity.provider]}
         </h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          {capacity.provider === "browserbase"
+          {capacity.provider !== "http"
             ? "External browser concurrency and Stolosio admission limits. There are no Stolosio-managed instances for this provider."
             : "Direct HTTP concurrency and queue limits enforced by Stolosio admission."}
         </p>
@@ -1074,7 +1075,7 @@ function ExternalCapacityDetail({
           label="Configured limit"
           value={capacity.max_active_sessions}
           detail={
-            capacity.provider === "browserbase"
+            capacity.provider !== "http"
               ? "Subscription or cost ceiling"
               : "Direct request ceiling"
           }

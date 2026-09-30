@@ -1,0 +1,27 @@
+[project]
+name = "pagecapture"
+version = "0.2.0"
+description = "A URL's HTML as a person would receive it, at the lowest cost: plain HTTP when that is enough, an adaptive browser render when it isn't"
+requires-python = ">=3.13"
+dependencies = [
+    "beautifulsoup4>=4.12",
+    "httpx>=0.28.1",
+    "lxml>=5.0",
+    "playwright==1.55.0",
+    "requests>=2.31",
+]
+
+[project.scripts]
+pagecapture = "pagecapture.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+line-length = 120
+
+[tool.ruff.lint.per-file-ignores]
+"src/pagecapture/render/scripts.py" = ["E501"]  # JavaScript sources
+"benchmarks/*" = ["E501", "ASYNC230"]           # offline report scripts

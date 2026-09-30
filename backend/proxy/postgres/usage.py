@@ -32,7 +32,7 @@ async def finalize_attempt_usage(
         if measured is not None:
             row.estimated_billable_ms = max(60_000, measured)
 
-    if row.provider == ProviderName.BROWSERLESS.value:
+    if row.provider in (ProviderName.BROWSERLESS.value, ProviderName.BROWSERLESS_CLOUD.value):
         row.chargeable_time_ms = row.capacity_occupied_ms
         row.cost_basis = "capacity_occupied"
     elif row.provider == ProviderName.BROWSERBASE.value:

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.db.models import (
     AcquisitionAttempt,
+    CaptureMethodCacheEntry,
     Domain,
     DomainProviderCostStat,
     GatewaySession,
@@ -753,6 +754,7 @@ async def test_fleet_snapshot_includes_every_provider_and_only_live_leases(
         "http",
         "browserless",
         "browserbase",
+        "browserless_cloud",
     ]
     browserless = next(
         snapshot for snapshot in snapshots if snapshot.provider is ProviderName.BROWSERLESS
@@ -831,6 +833,7 @@ async def test_retention_keeps_unpublished_outbox_rows(
         event_days=1,
         terminal_session_days=90,
         domain_days=365,
+        method_cache_days=30,
         batch_size=1,
     )
 
@@ -841,3 +844,36 @@ async def test_retention_keeps_unpublished_outbox_rows(
         remaining = list(await database.scalars(select(SessionEventRecord)))
     assert len(remaining) == 1
     assert remaining[0].published_at is None
+
+
+@pytest.mark.asyncio
+async def test_retention_purges_method_cache_entries_unseen_for_the_ttl(
+    database_sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    now = datetime.now(UTC)
+    async with database_sessions.begin() as database:
+        database.add_all(
+            [
+                CaptureMethodCacheEntry(
+                    key="url:old", entry={}, last_seen=now - timedelta(days=31)
+                ),
+                CaptureMethodCacheEntry(
+                    key="url:recent", entry={}, last_seen=now - timedelta(days=1)
+                ),
+            ]
+        )
+    retention = RetentionJob(
+        database_sessions,
+        event_days=30,
+        terminal_session_days=90,
+        domain_days=365,
+        method_cache_days=30,
+        batch_size=100,
+    )
+
+    deleted = await retention.run_once()
+
+    assert deleted["capture_method_cache"] == 1
+    async with database_sessions() as database:
+        keys = list(await database.scalars(select(CaptureMethodCacheEntry.key)))
+    assert keys == ["url:recent"]

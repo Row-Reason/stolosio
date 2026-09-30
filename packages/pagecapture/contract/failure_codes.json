@@ -1,0 +1,82 @@
+{
+  "rate_limited": {
+    "category": "website",
+    "transient": true
+  },
+  "website_error": {
+    "category": "website",
+    "transient": true
+  },
+  "not_found": {
+    "category": "website",
+    "transient": false
+  },
+  "gone": {
+    "category": "website",
+    "transient": false
+  },
+  "access_denied": {
+    "category": "website",
+    "transient": false
+  },
+  "request_rejected": {
+    "category": "website",
+    "transient": false
+  },
+  "paywall": {
+    "category": "website",
+    "transient": false
+  },
+  "parked": {
+    "category": "website",
+    "transient": false
+  },
+  "geo_blocked": {
+    "category": "website",
+    "transient": false
+  },
+  "bot_challenge": {
+    "category": "website",
+    "transient": false
+  },
+  "bot_blocked": {
+    "category": "website",
+    "transient": false
+  },
+  "unreachable": {
+    "category": "network",
+    "transient": true
+  },
+  "capacity": {
+    "category": "gateway",
+    "transient": true
+  },
+  "browser_unavailable": {
+    "category": "gateway",
+    "transient": true
+  },
+  "deadline_exceeded": {
+    "category": "gateway",
+    "transient": true
+  },
+  "incomplete_content": {
+    "category": "content",
+    "transient": true
+  },
+  "interstitial": {
+    "category": "content",
+    "transient": true
+  },
+  "unsupported_browser": {
+    "category": "content",
+    "transient": false
+  },
+  "excluded": {
+    "category": "content",
+    "transient": false
+  },
+  "unsupported_media_type": {
+    "category": "content",
+    "transient": false
+  }
+}

@@ -4,6 +4,10 @@ Stolosio is a browser and web-acquisition gateway. It gives CDP-compatible autom
 clients one endpoint across a bounded HTTP path, a Stolosio-managed Browserless fleet,
 and quota-controlled Browserbase capacity.
 
+`POST /v1/capture` returns a page's content as a person would receive it, or a failure
+that says why, choosing plain HTTP, a render on the managed fleet, or paid challenge
+resolution by itself ([Page capture](docs/CAPTURE.md)).
+
 It is for teams building browser automation, scraping, testing, and web-data systems
 that want to change providers without rewriting downstream automation. Stolosio owns
 session admission, provider queues, managed browser fleets, observations, and
@@ -117,6 +121,7 @@ The publishing workflow targets `ghcr.io/elei-io/stolosio` and
 - [Architecture](docs/ARCHITECTURE.md)
 - [Fleet management](docs/FLEET_MANAGEMENT.md)
 - [Kubernetes and k3s](docs/KUBERNETES.md)
+- [Page capture](docs/CAPTURE.md)
 - [Provider matrix](docs/PROVIDERS.md)
 - [DEBUG stream](docs/DEBUG.md)
 - [No-browser execution](docs/NO_BROWSER.md)

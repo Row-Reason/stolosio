@@ -46,12 +46,14 @@ import type {
 const providerLabels: Record<ActivityProvider, string> = {
   http: "HTTP",
   browserbase: "Browserbase",
+  browserless_cloud: "Browserless cloud",
   browserless: "Browserless",
 }
 
 const providerDescriptions: Record<ActivityProvider, string> = {
   http: "No-browser acquisition",
   browserbase: "External CDP capacity for difficult sites",
+  browserless_cloud: "Paid stealth browsers, never chosen automatically",
   browserless: "Managed browser lifecycle",
 }
 

@@ -6,6 +6,7 @@ from pydantic import TypeAdapter, ValidationError
 from backend.proxy.contracts import RequestedSessionSettings
 from backend.proxy.errors import InvalidStolosioSettings
 from backend.proxy.settings.base import BaseStolosioSetting
+from backend.proxy.settings.browserless import StolosioBrowserlessSetting
 from backend.proxy.settings.provider import StolosioProviderSetting
 from backend.proxy.settings.session import StolosioSessionSetting
 
@@ -97,5 +98,5 @@ class StolosioSettingsRegistry:
 
 
 stolosio_settings_registry = StolosioSettingsRegistry(
-    (StolosioProviderSetting, StolosioSessionSetting)
+    (StolosioProviderSetting, StolosioSessionSetting, StolosioBrowserlessSetting)
 )

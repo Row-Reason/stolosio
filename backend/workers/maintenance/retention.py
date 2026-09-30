@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.db.models import Domain, GatewaySession, SessionEventRecord
+from backend.db.models import CaptureMethodCacheEntry, Domain, GatewaySession, SessionEventRecord
 
 
 class RetentionJob:
@@ -14,12 +14,14 @@ class RetentionJob:
         event_days: int,
         terminal_session_days: int,
         domain_days: int,
+        method_cache_days: int,
         batch_size: int,
     ) -> None:
         self._sessions = sessions
         self._event_days = event_days
         self._terminal_session_days = terminal_session_days
         self._domain_days = domain_days
+        self._method_cache_days = method_cache_days
         self._batch_size = batch_size
 
     async def run_once(self) -> dict[str, int]:
@@ -61,4 +63,19 @@ class RetentionJob:
             )
             result = await database.execute(delete(Domain).where(Domain.id.in_(domain_ids)))
             deleted["domains"] = result.rowcount
+
+        async with self._sessions.begin() as database:
+            # pagecapture treats entries unseen this long as expired anyway
+            keys = (
+                select(CaptureMethodCacheEntry.key)
+                .where(
+                    CaptureMethodCacheEntry.last_seen
+                    < now - timedelta(days=self._method_cache_days)
+                )
+                .limit(self._batch_size)
+            )
+            result = await database.execute(
+                delete(CaptureMethodCacheEntry).where(CaptureMethodCacheEntry.key.in_(keys))
+            )
+            deleted["capture_method_cache"] = result.rowcount
         return deleted

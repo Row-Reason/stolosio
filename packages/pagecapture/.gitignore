@@ -1,0 +1,5 @@
+.env
+results/
+.cache/
+# the labelled response snapshot (225 MB) lives outside git; see README
+data/snapshot.jsonl.gz
