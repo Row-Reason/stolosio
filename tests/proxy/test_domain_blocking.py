@@ -73,6 +73,30 @@ async def test_blocklist_is_injected_without_holding_unrelated_messages() -> Non
 
 
 @pytest.mark.asyncio
+async def test_a_new_targets_create_response_waits_behind_its_attach_event() -> None:
+    # Chrome announces a new page before answering Target.createTarget; Playwright looks the
+    # page up by the returned targetId, so the answer must not overtake the held attach event.
+    attached = {
+        "method": "Target.attachedToTarget",
+        "params": {
+            "sessionId": "new-session",
+            "targetInfo": {"targetId": "new-target", "type": "page"},
+            "waitingForDebugger": True,
+        },
+    }
+    created = {"id": 3, "result": {"targetId": "new-target"}}
+    unrelated = {"id": 4, "result": {"targetId": "other-target"}}
+    upstream = FakeProviderSession(
+        [attached, created, unrelated, {"id": -1, "sessionId": "new-session", "result": {}}]
+    )
+    session = DomainBlockingProviderSession(upstream, ("ads.example",))
+
+    messages = [json.loads(message) async for message in session.messages()]
+
+    assert messages == [unrelated, attached, created]
+
+
+@pytest.mark.asyncio
 async def test_non_network_targets_are_not_modified() -> None:
     browser = {
         "method": "Target.attachedToTarget",
