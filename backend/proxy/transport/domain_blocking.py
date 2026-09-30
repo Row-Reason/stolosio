@@ -316,18 +316,22 @@ class DomainBlockingProviderSession:
         session_id = value.get("sessionId")
         if isinstance(session_id, str):
             return session_id
-        params = value.get("params")
-        if not isinstance(params, dict):
-            return None
-        nested_session_id = params.get("sessionId")
-        if isinstance(nested_session_id, str):
-            return nested_session_id
-        target = params.get("targetInfo")
-        target_id = target.get("targetId") if isinstance(target, dict) else None
-        if not isinstance(target_id, str):
-            target_id = params.get("targetId")
-        if isinstance(target_id, str):
-            return self._target_sessions.get(target_id)
+        # Events name their target in params; browser-level responses (Target.createTarget,
+        # Target.attachToTarget) in result. Chrome sends a new target's attachedToTarget before
+        # the response that names it, and clients such as Playwright rely on that order, so a
+        # response about a target still being configured waits behind its attach event.
+        for container in (value.get("params"), value.get("result")):
+            if not isinstance(container, dict):
+                continue
+            nested_session_id = container.get("sessionId")
+            if isinstance(nested_session_id, str):
+                return nested_session_id
+            target = container.get("targetInfo")
+            target_id = target.get("targetId") if isinstance(target, dict) else None
+            if not isinstance(target_id, str):
+                target_id = container.get("targetId")
+            if isinstance(target_id, str):
+                return self._target_sessions.get(target_id)
         return None
 
 

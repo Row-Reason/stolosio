@@ -49,6 +49,14 @@ If the provider rejects or times out while applying the policy, Stolosio closes 
 connection with `domain_blocking_unavailable` rather than continuing without the
 requested policy.
 
+The blocklist is for ads, trackers and similar requests a page makes on its own. In a
+`/v1/connect` session it fails a page's subresource, `fetch()` and worker requests to a
+listed host (Chrome reports them as blocked by the inspector). It does not stop the page
+itself from navigating there: a `goto`, link, redirect or popup to a listed host still
+loads, because `Network.setBlockedURLs` does not apply to top-level navigations (checked on
+Chrome 149). Capture merges the list into its exclusions, which are enforced through the
+Fetch domain and also end a navigation or redirect into a listed host.
+
 Page capture's plain HTTP fetch does not fetch page subresources. It applies the same
 policy to the request URL and every redirect hop and fails the capture as `excluded` for
 a matching destination (see [Page capture](CAPTURE.md)).
@@ -95,8 +103,8 @@ startup; recreate containers after changing resolver or interface configuration.
 Kubernetes NetworkPolicy remains an outer boundary and must restrict ingress to
 Browserless and the fetch proxy. It cannot replace the in-container rules for
 localhost. The self-hosted firewall does not protect remote browsers: Browserless
-cloud sessions run outside it, so only the domain blocklist, applied in the browser,
-constrains them.
+cloud sessions run outside it, and nothing in Stolosio restricts where they connect; the
+domain blocklist only filters their pages' own requests.
 
 ### Verification
 

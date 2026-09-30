@@ -37,6 +37,6 @@ Every acquisition attempt is charged for the time it holds capacity, from acquis
 
 ## Domain blocking
 
-The same operator-managed domain blocklist, edited on the Policy page, applies to every browser attempt and every capture. Stolosio returns `domain_blocking_unavailable` if it cannot apply the policy. Capture's plain HTTP fetch checks every redirect hop and has no subresource requests to filter.
+The same operator-managed domain blocklist, edited on the Policy page, applies to every browser attempt and every capture. It is meant for ads, trackers and similar requests. In `/v1/connect` sessions it fails a page's own requests to a listed host but does not stop navigating to one; capture also refuses those navigations, and its plain HTTP fetch checks every redirect hop. Stolosio returns `domain_blocking_unavailable` if it cannot apply the policy.
 
 This policy does not replace network isolation. See [security](/docs/security/).

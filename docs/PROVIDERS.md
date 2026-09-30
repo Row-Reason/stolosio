@@ -51,8 +51,9 @@ support.
 Browserless and Browserless cloud attempts receive the same operator-managed domain
 blocklist through a Stolosio-owned CDP target bootstrap. Policy injection is required:
 if a provider cannot apply it, Stolosio reports `domain_blocking_unavailable` instead
-of silently running unblocked. Capture's plain HTTP fetch enforces the list on every
-redirect hop. See
+of silently running unblocked. In `/v1/connect` sessions the list filters a page's own
+requests (ads, trackers), not navigations to a listed host; capture also refuses those
+navigations, and its plain HTTP fetch enforces the list on every redirect hop. See
 [Network policy](NETWORK_POLICY.md).
 
 ## Time and cost observations
