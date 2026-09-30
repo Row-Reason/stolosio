@@ -370,7 +370,10 @@ class PostgresAttemptRepository:
                         GatewaySession.lease_expires_at <= now,
                     ),
                 )
-                .with_for_update()
+                .order_by(AcquisitionAttempt.id)
+                # Only attempts change here. Locking the joined sessions too would take them
+                # after provider state, while session-owned paths lock them before it.
+                .with_for_update(of=AcquisitionAttempt)
             )
         )
         for row in rows:

@@ -2,7 +2,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -177,15 +177,29 @@ class FleetRepository:
             fleet = await database.get(ProviderFleet, provider.value, with_for_update=True)
             if fleet is None:
                 raise LookupError(f"No managed fleet for {provider.value}")
+            # Admission locks provider state and then ready instances by id; observation takes
+            # the same locks in the same order, or the two deadlock on instance rows.
+            await self._lock_provider(database, provider.value)
             now = await self._now(database)
             expires = now + timedelta(seconds=observation_ttl_seconds)
             seen = {observation.instance_id for observation in observations}
-            for observation in observations:
-                row = await database.get(
-                    ProviderInstance,
-                    observation.instance_id,
-                    with_for_update=True,
+            locked = {
+                row.id: row
+                for row in await database.scalars(
+                    select(ProviderInstance)
+                    .where(
+                        or_(
+                            ProviderInstance.id.in_(seen),
+                            (ProviderInstance.provider == provider.value)
+                            & (ProviderInstance.state != FleetInstanceState.STOPPED.value),
+                        )
+                    )
+                    .order_by(ProviderInstance.id)
+                    .with_for_update()
                 )
+            }
+            for observation in observations:
+                row = locked.get(observation.instance_id)
                 previous_state = row.state if row is not None else None
                 if row is None:
                     row = ProviderInstance(
@@ -226,18 +240,8 @@ class FleetRepository:
                 ):
                     row.draining_at = now
 
-            existing = list(
-                await database.scalars(
-                    select(ProviderInstance)
-                    .where(
-                        ProviderInstance.provider == provider.value,
-                        ProviderInstance.state != FleetInstanceState.STOPPED.value,
-                    )
-                    .with_for_update()
-                )
-            )
-            for row in existing:
-                if row.id not in seen:
+            for row in locked.values():
+                if row.provider == provider.value and row.id not in seen:
                     row.state = FleetInstanceState.STOPPED.value
                     row.stopped_at = now
                     row.observation_expires_at = now

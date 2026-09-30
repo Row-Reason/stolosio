@@ -252,6 +252,33 @@ async def test_no_free_slot_is_a_retryable_refusal_not_a_capture(runner, databas
     assert states == ["closed", "failed"]
 
 
+class DeadlockDetected(RuntimeError):
+    sqlstate = "40P01"
+
+
+@pytest.mark.asyncio
+async def test_a_persistent_database_conflict_is_a_retryable_refusal(
+    runner, database_sessions
+) -> None:
+    repository = runner._attempts._repository
+    enqueued = 0
+
+    async def deadlocked(*args, **kwargs):
+        nonlocal enqueued
+        enqueued += 1
+        raise DeadlockDetected("deadlock detected")
+
+    repository.enqueue = deadlocked
+    with pytest.raises(CaptureUnavailable) as refused:
+        await runner.capture(CaptureRequest(url="https://example.test/page"))
+
+    assert refused.value.reason == "database_conflict" and refused.value.retry_after_seconds > 0
+    assert enqueued == 3
+    async with database_sessions() as database:
+        states = list(await database.scalars(select(GatewaySession.state)))
+    assert states == ["failed"]
+
+
 @pytest.mark.asyncio
 async def test_challenge_resolution_trades_the_local_slot_for_a_cloud_attempt(
     runner, database_sessions

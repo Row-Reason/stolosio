@@ -179,7 +179,7 @@ CAPTURES = Counter(
 )
 CAPTURE_REJECTED = Counter(
     "stolosio_capture_rejected_total",
-    "Captures refused before starting (503) for lack of capacity.",
+    "Captures refused (503) for lack of capacity or a database conflict.",
     ("reason",),
     registry=REGISTRY,
 )

@@ -4,10 +4,15 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from backend.db.models import AcquisitionAttempt, GatewaySession, SessionEventRecord
+from backend.db.models import (
+    AcquisitionAttempt,
+    GatewaySession,
+    ProviderInstance,
+    SessionEventRecord,
+)
 from backend.fleet import FleetInstanceState, FleetRepository, ObservedInstance
 from backend.messaging import PollingNotifier
 from backend.proxy.attempts import AttemptAdmission
@@ -20,6 +25,7 @@ from backend.proxy.errors import (
 )
 from backend.proxy.external_capacity import ExternalCapacityRepository
 from backend.proxy.postgres import (
+    AttemptAdmissionStatus,
     PostgresAttemptRepository,
     PostgresSessionRepository,
     SessionRepositorySettings,
@@ -651,3 +657,107 @@ async def test_disabled_managed_fleet_does_not_assign_observed_instance(
 
     assert await attempt_repository.active_count(ProviderName.BROWSERLESS) == 0
     await session.release(failed=True, reason="provider_queue_timeout")
+
+
+@pytest.mark.asyncio
+async def test_fleet_observation_and_admission_lock_instances_in_one_order(
+    database_sessions: async_sessionmaker[AsyncSession],
+    admission_settings: Settings,
+) -> None:
+    """Production deadlock: admission locked ready instances by id while a fleet observation
+    locked them in observation order. The observation holds z and waits for b; admission holds a
+    and waits for b; once b frees, the observation's sweep needs a and each waits on the other."""
+    tag = f"lock-order-{uuid4().hex[:12]}"
+    async with database_sessions() as database:
+        schema = await database.scalar(text("SELECT current_schema()"))
+    engine = create_async_engine(
+        Settings().database_url,
+        connect_args={"server_settings": {"search_path": schema, "application_name": tag}},
+    )
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    fleets = FleetRepository(sessions)
+    await fleets.ensure_fleet(
+        ProviderName.BROWSERLESS,
+        minimum_instances=1,
+        maximum_instances=3,
+        session_capacity_per_instance=1,
+        scale_down_cooldown_seconds=1,
+    )
+
+    def observed(instance_id: str) -> ObservedInstance:
+        return ObservedInstance(
+            instance_id=instance_id,
+            endpoint=f"ws://{instance_id}:3000",
+            state=FleetInstanceState.READY,
+        )
+
+    async def observe(*instance_ids: str) -> None:
+        await fleets.observe_instances(
+            ProviderName.BROWSERLESS,
+            [observed(instance_id) for instance_id in instance_ids],
+            platform="test",
+            observation_ttl_seconds=10,
+        )
+
+    async def lock_waiters(count: int) -> None:
+        async with asyncio.timeout(5):
+            while True:
+                async with database_sessions() as database:
+                    waiting = await database.scalar(
+                        text(
+                            "SELECT count(*) FROM pg_stat_activity "
+                            "WHERE application_name = :tag AND wait_event_type = 'Lock'"
+                        ),
+                        {"tag": tag},
+                    )
+                if waiting == count:
+                    return
+                await asyncio.sleep(0.01)
+
+    try:
+        await observe("instance-a", "instance-b", "instance-z")
+        session = await admit(
+            PostgresSessionRepository(
+                sessions,
+                SessionRepositorySettings(lease_seconds=admission_settings.session_lease_seconds),
+            ),
+            admission_settings,
+            "lock-order",
+        )
+        attempts = PostgresAttemptRepository(sessions)
+        async with sessions.begin() as blocker:
+            await blocker.execute(
+                select(ProviderInstance)
+                .where(ProviderInstance.id == "instance-b")
+                .with_for_update()
+            )
+            # Observation order z, b; instance-a disappeared and must be swept to stopped.
+            observation = asyncio.create_task(observe("instance-z", "instance-b"))
+            await lock_waiters(1)
+            admission = asyncio.create_task(
+                attempts.enqueue(
+                    session.session,
+                    str(uuid4()),
+                    ProviderName.BROWSERLESS,
+                    resolved_settings={},
+                    setting_sources={},
+                )
+            )
+            await lock_waiters(2)
+        _, (status, attempt) = await asyncio.wait_for(
+            asyncio.gather(observation, admission), timeout=10
+        )
+
+        assert status is AttemptAdmissionStatus.ACQUIRING
+        assert attempt.provider_instance_id in {"instance-b", "instance-z"}
+        async with sessions() as database:
+            stopped = await database.scalar(
+                select(func.count())
+                .select_from(ProviderInstance)
+                .where(ProviderInstance.id == "instance-a", ProviderInstance.state == "stopped")
+            )
+        assert stopped == 1
+        await attempts.finish(attempt, failed=False, reason="test")
+        await session.release()
+    finally:
+        await engine.dispose()
