@@ -30,6 +30,12 @@ browserbase:
   apiKeySecretKey: api-key
   projectIdSecretKey: project-id
 
+browserlessCloud:
+  url: https://production-sfo.browserless.io
+  proxyCountry: jp
+  existingSecret: ""
+  tokenSecretKey: token
+
 api:
   replicas: 2
   service:

@@ -6,10 +6,12 @@ boundary.
 
 ## Product contract
 
-Stolosio presents one CDP-compatible endpoint to downstream automation:
+Stolosio presents two endpoints: a CDP-compatible one for browser automation, and a
+capture endpoint for "give me this page" (`docs/CAPTURE.md`):
 
 ```text
-WS /v1/connect
+WS   /v1/connect
+POST /v1/capture
 ```
 
 - Existing CDP and Playwright `connect_over_cdp()` clients should need only a URL

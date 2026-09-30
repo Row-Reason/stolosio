@@ -303,6 +303,7 @@ async def _run_connected() -> None:
             event_days=settings.session_event_retention_days,
             terminal_session_days=settings.terminal_session_retention_days,
             domain_days=settings.domain_history_retention_days,
+            method_cache_days=settings.capture_method_cache_retention_days,
             batch_size=settings.retention_delete_batch_size,
         )
         tasks = [

@@ -13,6 +13,7 @@ class ProviderSelection(StrEnum):
     HTTP = ProviderName.HTTP
     BROWSERLESS = ProviderName.BROWSERLESS
     BROWSERBASE = ProviderName.BROWSERBASE
+    BROWSERLESS_CLOUD = ProviderName.BROWSERLESS_CLOUD
 
 
 class SettingSource(StrEnum):
@@ -25,6 +26,12 @@ class SettingSource(StrEnum):
 class ProviderSettingSchema(BaseModel):
     slug: ProviderName | None = None
     allow_paid_fallback: bool = False
+
+
+class BrowserlessSettingSchema(BaseModel):
+    # Residential exit country for browserless_cloud (ISO 3166-1 alpha-2); default: Stolosio's
+    # setting.
+    proxy_country: str | None = Field(default=None, pattern=r"^[a-z]{2}$")
 
 
 class SessionSettingSchema(BaseModel):
@@ -56,6 +63,7 @@ class ResolvedSessionSettings:
     provider: ProviderSettingSchema
     session: SessionSettingSchema
     sources: dict[str, SettingSource]
+    browserless: BrowserlessSettingSchema = field(default_factory=BrowserlessSettingSchema)
     blocked_domain_patterns: tuple[str, ...] = ()
     network_policy_version: int = 1
 

@@ -1,0 +1,277 @@
+import asyncio
+import logging
+import time
+from dataclasses import replace
+from datetime import UTC, datetime
+
+from pagecapture import BqlBrowserTier, CaptureRequest, CaptureResult, CaptureService, Exclusion
+from pagecapture import Settings as PageCaptureSettings
+from pagecapture.classify import Classifier
+from pagecapture.render import BrowserCapacity, Renderer
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from backend.db.models import SessionEventRecord
+from backend.events.registry import EventType, validate_payload
+from backend.metrics.definitions import (
+    CAPTURE_BROWSER_SECONDS,
+    CAPTURE_DURATION,
+    CAPTURE_PAID,
+    CAPTURE_REJECTED,
+    CAPTURES,
+)
+from backend.proxy.adapters.browserless_cloud import browserless_cloud_url
+from backend.proxy.attempts import AttemptAdmission, AttemptLease
+from backend.proxy.capture.cache import PostgresMethodCache
+from backend.proxy.capture.fetcher import StolosioFetcher
+from backend.proxy.capture.tiers import CloudChallengeTier, SharedRenderer, SlotTier
+from backend.proxy.contracts import (
+    ProviderName,
+    ProviderSettingSchema,
+    RequestedSessionSettings,
+    ResolvedSessionSettings,
+    SessionSettingSchema,
+    SettingSource,
+)
+from backend.proxy.errors import GatewayCapacityFull, ProviderQueueFull, ProviderQueueTimeout
+from backend.proxy.external_capacity import ExternalCapacityRepository
+from backend.proxy.network_policy import NetworkPolicyRepository
+from backend.proxy.sessions import SessionAdmission, SessionLease
+from backend.settings import Settings
+
+logger = logging.getLogger(__name__)
+
+# Admission may use the deadline, but only while this much of it is left for the capture itself.
+MIN_CAPTURE_SECONDS = 10.0
+RETRY_AFTER_SECONDS = 5
+
+
+class CaptureUnavailable(Exception):
+    """No capacity to start the capture (a 503 with Retry-After)."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.retry_after_seconds = RETRY_AFTER_SECONDS
+
+
+class _Capture:
+    """One capture's hold on Stolosio capacity: its session, its local slot, and the cloud attempt
+    that may replace the slot for challenge resolution."""
+
+    def __init__(self, session: SessionLease) -> None:
+        self.session = session
+        self.slot: AttemptLease | None = None
+        self.cloud: AttemptLease | None = None
+
+
+class CaptureRunner:
+    """Runs pagecapture for one request on Stolosio's capacity. A capture is a Stolosio session
+    holding one local browserless slot from before the plain fetch to the response, so captures and
+    /v1/connect sessions share one admission, queue and accounting. The request's exclusions are
+    merged with the network policy."""
+
+    def __init__(
+        self,
+        sessions: SessionAdmission,
+        attempts: AttemptAdmission,
+        network_policy: NetworkPolicyRepository,
+        external_capacity: ExternalCapacityRepository,
+        database_sessions: async_sessionmaker[AsyncSession],
+        settings: Settings,
+    ) -> None:
+        self._sessions = sessions
+        self._attempts = attempts
+        self._network_policy = network_policy
+        self._external_capacity = external_capacity
+        self._database_sessions = database_sessions
+        self._settings = settings
+        self._page_settings = PageCaptureSettings(
+            browser_ws=None,
+            challenge_browser_ws=None,
+            method_cache_path=None,
+            http_timeout_s=settings.http_request_timeout_seconds,
+            http_max_response_bytes=settings.http_max_response_bytes,
+            proxy_country=settings.browserless_cloud_proxy_country,
+            capture_cap_s=settings.capture_default_deadline_ms / 1000,
+        )
+        self._fetcher = StolosioFetcher(self._page_settings, proxy=settings.http_fetch_proxy_url)
+        self._renderer = SharedRenderer(Renderer(self._page_settings))
+        self._cloud = (
+            BqlBrowserTier(
+                browserless_cloud_url(
+                    str(settings.browserless_cloud_url),
+                    settings.browserless_cloud_token,
+                    path="/stealth/bql",
+                    proxy_country=settings.browserless_cloud_proxy_country,
+                    websocket=False,
+                ),
+                settings=self._page_settings,
+                proxied=True,
+            )
+            if settings.browserless_cloud_token
+            else None
+        )
+        self._classifier = Classifier(self._page_settings)
+        self._cache = PostgresMethodCache(database_sessions)
+
+    async def close(self) -> None:
+        for part in (self._fetcher, self._renderer, self._cloud):
+            if part is not None:
+                await part.close()
+
+    async def capture(self, request: CaptureRequest) -> CaptureResult:
+        started = time.monotonic()
+        deadline_s = (request.deadline_ms or self._settings.capture_default_deadline_ms) / 1000
+        policy = await self._network_policy.settings()
+        resolved = ResolvedSessionSettings(
+            provider=ProviderSettingSchema(slug=ProviderName.BROWSERLESS),
+            session=SessionSettingSchema(),
+            sources={"stolosio.provider.slug": SettingSource.AUTO},
+            blocked_domain_patterns=policy.blocked_domain_patterns,
+            network_policy_version=policy.configuration_version,
+        )
+        try:
+            session = await self._sessions.admit(
+                RequestedSessionSettings(
+                    overrides={"stolosio.provider.slug": ProviderName.BROWSERLESS}
+                )
+            )
+        except GatewayCapacityFull as error:
+            raise self._unavailable(error.reason) from error
+        capture = _Capture(session)
+        failed, reason = True, "capture_failed"
+        result: CaptureResult | None = None
+        try:
+            admission_s = deadline_s - (time.monotonic() - started) - MIN_CAPTURE_SECONDS
+            try:
+                if admission_s <= 0:
+                    raise TimeoutError
+                async with asyncio.timeout(admission_s):
+                    capture.slot = await self._attempts.acquire(session.session, resolved)
+            except (ProviderQueueFull, ProviderQueueTimeout) as error:
+                reason = error.reason
+                raise self._unavailable(error.reason) from error
+            except TimeoutError as error:
+                reason = ProviderQueueTimeout.reason
+                raise self._unavailable(ProviderQueueTimeout.reason) from error
+            await session.open()
+            await capture.slot.activate()
+
+            endpoint = capture.slot.attempt.endpoint or str(self._settings.browserless_url)
+            service = CaptureService(
+                self._page_settings,
+                fetcher=self._fetcher,
+                managed=SlotTier(self._renderer, endpoint),
+                challenge_resolution=await self._challenge_tier(request, capture, resolved),
+                classifier=self._classifier,
+                cache=self._cache,
+            )
+            remaining_ms = max(1, round((deadline_s - (time.monotonic() - started)) * 1000))
+            exclusions = request.exclusions + tuple(
+                Exclusion(p) for p in policy.blocked_domain_patterns
+            )
+            result = await service.capture(
+                replace(request, exclusions=exclusions, deadline_ms=remaining_ms)
+            )
+            failed, reason = False, "capture_completed"
+            return result
+        except asyncio.CancelledError:
+            reason = "client_disconnected"
+            raise
+        finally:
+            duration_ms = round((time.monotonic() - started) * 1000)
+            if result is not None:
+                await self._bounded(self._record(session, result, duration_ms), "capture event")
+            for attempt in (capture.cloud, capture.slot):
+                if attempt is not None:
+                    await self._bounded(attempt.release(failed=failed, reason=reason), "attempt")
+            await self._bounded(session.release(failed=failed, reason=reason), "session")
+
+    async def _challenge_tier(
+        self,
+        request: CaptureRequest,
+        capture: _Capture,
+        resolved: ResolvedSessionSettings,
+    ) -> CloudChallengeTier | None:
+        """Only when the caller allows paid resolution and an operator enabled Browserless cloud."""
+        if not request.resolve_bot_challenges or self._cloud is None:
+            return None
+        limit = await self._external_capacity.get(ProviderName.BROWSERLESS_CLOUD)
+        if limit is None or not limit.enabled:
+            return None
+        cloud_settings = replace(
+            resolved,
+            provider=ProviderSettingSchema(slug=ProviderName.BROWSERLESS_CLOUD),
+        )
+
+        async def switch(deadline_s: float) -> None:
+            assert capture.slot is not None
+            try:
+                async with asyncio.timeout(
+                    max(1.0, min(deadline_s / 2, self._settings.provider_queue_timeout_seconds))
+                ):
+                    capture.cloud = await self._attempts.acquire(
+                        capture.session.session,
+                        cloud_settings,
+                        replacement_for=capture.slot.attempt.attempt_id,
+                    )
+            except (ProviderQueueFull, ProviderQueueTimeout, TimeoutError) as error:
+                raise BrowserCapacity(f"no Browserless cloud capacity: {error!r}") from error
+            # The local slot is done: nothing renders locally after challenge resolution.
+            await self._bounded(
+                capture.slot.release(failed=False, reason="challenge_resolution"),
+                "attempt",
+            )
+            await capture.cloud.activate()
+
+        return CloudChallengeTier(self._cloud, switch)
+
+    async def _record(self, session: SessionLease, result: CaptureResult, duration_ms: int) -> None:
+        tiers = list(dict.fromkeys(attempt.tier for attempt in result.evidence.attempts))
+        last_tier = result.evidence.attempts[-1].tier if result.evidence.attempts else "direct"
+        cost = result.evidence.cost
+        failure = result.failure
+        CAPTURES.labels(result.outcome, failure.category if failure else "none").inc()
+        CAPTURE_DURATION.labels(last_tier).observe(duration_ms / 1000)
+        for attempt in result.evidence.attempts:
+            if attempt.path == "browser":
+                CAPTURE_BROWSER_SECONDS.labels(attempt.tier).inc(attempt.duration_ms / 1000)
+        if cost.paid:
+            CAPTURE_PAID.inc()
+        payload = validate_payload(
+            EventType.CAPTURE_COMPLETED,
+            {
+                "outcome": result.outcome,
+                "failure_code": failure.code if failure else None,
+                "failure_category": failure.category if failure else None,
+                "representation": result.document.representation if result.document else None,
+                "tiers": tiers,
+                "duration_ms": duration_ms,
+                "browser_seconds": cost.browser_seconds,
+                "paid": cost.paid,
+                "bytes": cost.bytes,
+            },
+        )
+        async with self._database_sessions.begin() as database:
+            database.add(
+                SessionEventRecord(
+                    session_id=session.session.session_id,
+                    event_type=EventType.CAPTURE_COMPLETED.value,
+                    provider=None,
+                    reason=failure.code[:64] if failure else None,
+                    occurred_at=datetime.now(UTC),
+                    payload=payload,
+                )
+            )
+
+    @staticmethod
+    def _unavailable(reason: str) -> CaptureUnavailable:
+        CAPTURE_REJECTED.labels(reason).inc()
+        return CaptureUnavailable(reason)
+
+    async def _bounded(self, cleanup, resource: str) -> None:
+        try:
+            async with asyncio.timeout(self._settings.session_cleanup_timeout_seconds):
+                await cleanup
+        except Exception:
+            logger.exception("Failed to finish Stolosio capture %s within cleanup budget", resource)

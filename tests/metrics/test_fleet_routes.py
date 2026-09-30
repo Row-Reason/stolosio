@@ -54,7 +54,7 @@ def test_json_and_prometheus_views_share_the_fleet_snapshot() -> None:
         "capacity": 100,
     }
     assert response.status_code == 200
-    assert len(response.json()) == 3
+    assert len(response.json()) == 4
     browserless = next(
         snapshot for snapshot in response.json() if snapshot["provider"] == "browserless"
     )

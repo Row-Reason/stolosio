@@ -364,13 +364,14 @@ class Renderer:
     async def __aexit__(self, *exc) -> None:
         await self._pw.stop()
 
-    async def _connect(self):
+    async def _connect(self, endpoint: str | None):
         """A fresh browser per render (no state shared between pages). Fleets answer 503 when busy: back off."""
-        if not self.endpoint:
+        endpoint = endpoint or self.endpoint
+        if not endpoint:
             raise ValueError("no browser endpoint: set PAGECAPTURE_BROWSER_WS or Settings.browser_ws")
         for attempt in range(6):
             try:
-                return await self._pw.chromium.connect_over_cdp(self.endpoint)
+                return await self._pw.chromium.connect_over_cdp(endpoint)
             except Exception as e:
                 if attempt == 5:
                     if re.search(r"\b(503|429)\b", str(e)):
@@ -384,15 +385,17 @@ class Renderer:
         deadline_s: float | None = None,
         attach_ws: str | None = None,
         exclusions: tuple[Exclusion, ...] = (),
+        endpoint: str | None = None,
     ) -> Rendered:
         """Render `url` in a fresh browser, or with `attach_ws`, continue on the page already open in that browser.
-        No request to an excluded URL leaves the page, and a page that lands on one keeps nothing.
+        No request to an excluded URL leaves the page, and a page that lands on one keeps nothing. `endpoint` picks
+        the browser for this render (default: the renderer's endpoint).
 
         Playwright's driver process can die on a page (assertions on frames attaching mid-handover were seen), and
         every render sharing it fails with it: the driver is restarted and the render tried once more."""
         t0, driver = time.perf_counter(), self._pw
         try:
-            result = await self._render(url, deadline_s, attach_ws, exclusions)
+            result = await self._render(url, deadline_s, attach_ws, exclusions, endpoint)
             if not (result.error and DRIVER_GONE in result.error):
                 return result
         except Exception as e:
@@ -400,7 +403,7 @@ class Renderer:
                 raise
         await self._restart_driver(driver)
         left = deadline_s - (time.perf_counter() - t0) if deadline_s else None
-        return await self._render(url, left, attach_ws, exclusions)
+        return await self._render(url, left, attach_ws, exclusions, endpoint)
 
     async def _restart_driver(self, dead) -> None:
         async with self._restart_lock:
@@ -446,14 +449,19 @@ class Renderer:
         await cdp.send("Fetch.enable", {"patterns": patterns})
 
     async def _render(
-        self, url: str, deadline_s: float | None, attach_ws: str | None, exclusions: tuple[Exclusion, ...]
+        self,
+        url: str,
+        deadline_s: float | None,
+        attach_ws: str | None,
+        exclusions: tuple[Exclusion, ...],
+        endpoint: str | None = None,
     ) -> Rendered:
         s = self.settings
         cap_s = s.render_cap_s + self.challenge_wait_s
         cap_s = min(cap_s, deadline_s) if deadline_s else cap_s
         result = Rendered(url=url)
         t0 = time.perf_counter()
-        browser = await (self._pw.chromium.connect_over_cdp(attach_ws) if attach_ws else self._connect())
+        browser = await (self._pw.chromium.connect_over_cdp(attach_ws) if attach_ws else self._connect(endpoint))
         try:
             if attach_ws:
                 ctx = browser.contexts[0]

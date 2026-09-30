@@ -329,7 +329,7 @@ def test_renderer_restarts_a_dead_driver_once_and_retries():
             super().__init__(Settings(browser_ws="ws://fleet"))
             self.calls, self.restarts, self._pw = 0, 0, object()
 
-        async def _render(self, url, deadline_s, attach_ws, exclusions):
+        async def _render(self, url, deadline_s, attach_ws, exclusions, endpoint=None):
             self.calls += 1
             if self.calls == 1:
                 raise Exception(f"Page.evaluate: {DRIVER_GONE}")

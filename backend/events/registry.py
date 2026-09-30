@@ -27,6 +27,7 @@ class EventType(StrEnum):
     JAVASCRIPT_EXCEPTION = "javascript.exception"
     PROVIDER_DISCONNECTED = "provider.disconnected"
     EXECUTION_TRANSITIONED = "execution.transitioned"
+    CAPTURE_COMPLETED = "capture.completed"
 
 
 class _Payload(BaseModel):
@@ -93,6 +94,18 @@ class ProviderTransitionPayload(_Payload):
     trigger_method: str = Field(max_length=128)
 
 
+class CapturePayload(_Payload):
+    outcome: str = Field(max_length=16)
+    failure_code: str | None = Field(default=None, max_length=64)
+    failure_category: str | None = Field(default=None, max_length=16)
+    representation: str | None = Field(default=None, max_length=16)
+    tiers: list[Annotated[str, Field(max_length=32)]] = Field(max_length=8)
+    duration_ms: int = Field(ge=0)
+    browser_seconds: float = Field(ge=0)
+    paid: bool
+    bytes: int = Field(ge=0)
+
+
 class ProviderDisconnectPayload(_Payload):
     reason: str | None = Field(default=None, max_length=64)
 
@@ -112,7 +125,7 @@ _COMMANDS = {
     EventType.COMMAND_FAILED,
     EventType.COMMAND_INTERRUPTED,
 }
-_OBSERVATIONS = set(EventType) - _LIFECYCLE - _ATTEMPTS - _COMMANDS
+_OBSERVATIONS = set(EventType) - _LIFECYCLE - _ATTEMPTS - _COMMANDS - {EventType.CAPTURE_COMPLETED}
 
 _MODELS: dict[EventType, type[_Payload]] = {
     **dict.fromkeys(_LIFECYCLE, LifecyclePayload),
@@ -122,6 +135,7 @@ _MODELS: dict[EventType, type[_Payload]] = {
     EventType.PROVIDER_DISCONNECTED: ProviderDisconnectPayload,
     EventType.EXECUTION_TRANSITIONED: ProviderTransitionPayload,
     EventType.COMMAND_SUMMARY: CommandSummaryPayload,
+    EventType.CAPTURE_COMPLETED: CapturePayload,
 }
 
 

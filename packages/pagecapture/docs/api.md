@@ -245,8 +245,8 @@ per-domain evidence in Postgres; the default is in memory, or SQLite via `PAGECA
 - a `Fetcher` — plain HTTP through the host's egress (proxy, network policy), returning an `HttpResponse` with
   ordered headers and redirects; raising `FetchError` when there is no response, `ExcludedUrl` when a redirect hop
   is excluded, and `UnsupportedMediaType` before reading a successful body of a type outside `accept`.
-  `HttpxFetcher` does all of this (with an optional egress `proxy`); a host adds its own policy by overriding
-  `blocked(url)`;
+  `HttpxFetcher` does all of this (with an optional egress `proxy`); a host rejects its egress's own error
+  answers by overriding `check_hop(response)`, and adds its own network policy to the request's exclusions;
 - `BrowserTier`s — `managed` and optionally `challenge_resolution` — each rendering a URL with the adaptive
   renderer on its own browsers, given the request's exclusions (`CdpBrowserTier` wraps any CDP endpoint).
 

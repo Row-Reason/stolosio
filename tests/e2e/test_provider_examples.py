@@ -74,7 +74,7 @@ async def test_evaluate(provider: ProviderName) -> None:
                 await page.evaluate("document.querySelector('h1').textContent")
             await browser.close()
             return
-        assert await page.evaluate("document.querySelector('h1').textContent") == "Example Domain"
+        assert await page.evaluate("document.title") == "Example Domain"
         await browser.close()
 
 

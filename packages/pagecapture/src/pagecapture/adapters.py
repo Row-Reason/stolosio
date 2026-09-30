@@ -140,17 +140,20 @@ class HttpxFetcher:
         )
         self._headers = {"User-Agent": self.s.user_agent, "Accept": ACCEPT_HEADER, "Accept-Language": "en-US,en;q=0.9"}
 
-    def blocked(self, url: str) -> bool:
-        """The host's own policy on top of the request's exclusions (none here; stolosio adds its network policy)."""
-        return False
+    def check_hop(self, response: httpx.Response) -> None:
+        """Every response on the way, redirects included, before it's followed or read. A host raises FetchError here
+        for answers that come from its egress rather than the site (stolosio: its proxy's own error pages)."""
 
     async def fetch(
         self, url: str, timeout_s: float, exclusions: tuple[Exclusion, ...] = (), accept: tuple[str, ...] | None = None
     ) -> HttpResponse:
         async def check(request: httpx.Request) -> None:
             hop = str(request.url)
-            if excluded(hop, exclusions) or self.blocked(hop):
+            if excluded(hop, exclusions):
                 raise ExcludedUrl(hop)
+
+        async def check_response(response: httpx.Response) -> None:
+            self.check_hop(response)
 
         start = time.perf_counter()
         client = httpx.AsyncClient(
@@ -160,7 +163,7 @@ class HttpxFetcher:
             follow_redirects=True,
             max_redirects=10,
             timeout=min(timeout_s, 30),
-            event_hooks={"request": [check]},
+            event_hooks={"request": [check], "response": [check_response]},
         )
         try:
             async with asyncio.timeout(timeout_s), client, client.stream("GET", url) as r:

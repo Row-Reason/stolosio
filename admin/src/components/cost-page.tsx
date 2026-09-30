@@ -41,6 +41,7 @@ const providerLabels: Record<ActivityProvider, string> = {
   http: "HTTP",
   browserless: "Browserless",
   browserbase: "Browserbase",
+  browserless_cloud: "Browserless cloud",
 }
 
 const windowLabels: Record<CostWindow, string> = {
@@ -129,6 +130,7 @@ function CostHistory({ data }: { data: CostOverview }) {
     http: "bg-sky-500",
     browserless: "bg-emerald-500",
     browserbase: "bg-violet-500",
+    browserless_cloud: "bg-fuchsia-500",
   }
 
   return (
@@ -157,6 +159,7 @@ function CostHistory({ data }: { data: CostOverview }) {
                       "http",
                       "browserless",
                       "browserbase",
+                      "browserless_cloud",
                     ] as ActivityProvider[]
                   ).map((provider) => {
                     const value = providers[provider] ?? 0

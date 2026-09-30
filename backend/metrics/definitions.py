@@ -176,3 +176,34 @@ RETENTION_DURATION = Histogram(
     "Duration of a complete retention pass.",
     registry=REGISTRY,
 )
+
+CAPTURES = Counter(
+    "stolosio_captures_total",
+    "Finished captures by outcome and failure category (none when captured).",
+    ("outcome", "category"),
+    registry=REGISTRY,
+)
+CAPTURE_REJECTED = Counter(
+    "stolosio_capture_rejected_total",
+    "Captures refused before starting (503) for lack of capacity.",
+    ("reason",),
+    registry=REGISTRY,
+)
+CAPTURE_DURATION = Histogram(
+    "stolosio_capture_duration_seconds",
+    "Capture duration from admission to response, by the last tier used.",
+    ("tier",),
+    buckets=(0.5, 1, 2.5, 5, 10, 20, 30, 45, 60, 90, 120),
+    registry=REGISTRY,
+)
+CAPTURE_BROWSER_SECONDS = Counter(
+    "stolosio_capture_browser_seconds_total",
+    "Browser time spent by captures, by tier.",
+    ("tier",),
+    registry=REGISTRY,
+)
+CAPTURE_PAID = Counter(
+    "stolosio_capture_paid_total",
+    "Captures that used a paid tier (challenge resolution).",
+    registry=REGISTRY,
+)

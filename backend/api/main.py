@@ -17,6 +17,7 @@ from backend.api.routes.admin_network import router as admin_network_router
 from backend.api.routes.admin_provider_capacity import router as admin_provider_capacity_router
 from backend.api.routes.admin_routing import router as admin_routing_router
 from backend.api.routes.admin_sessions import router as admin_sessions_router
+from backend.api.routes.capture import router as capture_router
 from backend.api.routes.debug import router as debug_router
 from backend.api.routes.fleet import router as fleet_router
 from backend.api.routes.health import router as health_router
@@ -36,6 +37,7 @@ from backend.messaging.jetstream import EVENT_STREAM, JetStreamEventPublisher
 from backend.metrics import FleetSnapshotService, InstrumentedEventPublisher
 from backend.metrics.definitions import JETSTREAM_TOPOLOGY_READY, NATS_CONNECTED
 from backend.proxy.attempts import AttemptAdmission
+from backend.proxy.capture import CaptureRunner
 from backend.proxy.command_costs import CommandCostQueryService
 from backend.proxy.contracts import ProviderName
 from backend.proxy.costs import CostQueryService
@@ -156,6 +158,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     external_capacity = ExternalCapacityRepository(
         session_factory,
         browserbase_api_key=settings.browserbase_api_key,
+        browserless_cloud_token=settings.browserless_cloud_token,
     )
     await external_capacity.ensure(
         ProviderName.HTTP,
@@ -167,6 +170,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ProviderName.BROWSERBASE,
         enabled=False,
         max_active_sessions=5,
+        max_queued_attempts=100,
+    )
+    # Paid: disabled until an operator enables it. 15 concurrent is the Prototyping plan's limit.
+    await external_capacity.ensure(
+        ProviderName.BROWSERLESS_CLOUD,
+        enabled=False,
+        max_active_sessions=15,
         max_queued_attempts=100,
     )
     repository = PostgresSessionRepository(
@@ -214,9 +224,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         routing=routing,
         network_policy=network_policy,
     )
+    app.state.capture = CaptureRunner(
+        sessions,
+        attempts,
+        network_policy,
+        external_capacity,
+        session_factory,
+        settings,
+    )
     try:
         yield
     finally:
+        await app.state.capture.close()
         nats_stopped.set()
         await nats_task
         await notifier.close()
@@ -233,6 +252,7 @@ app.include_router(admin_provider_capacity_router)
 app.include_router(admin_domains_router)
 app.include_router(admin_routing_router)
 app.include_router(admin_sessions_router)
+app.include_router(capture_router)
 app.include_router(health_router)
 app.include_router(debug_router)
 app.include_router(fleet_router)

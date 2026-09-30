@@ -34,11 +34,23 @@ class ExternalCapacityRepository:
         sessions: async_sessionmaker[AsyncSession],
         *,
         browserbase_api_key: str | None = None,
+        browserless_cloud_token: str | None = None,
     ) -> None:
         self._sessions = sessions
-        self._browserbase_api_key_configured = bool(
-            browserbase_api_key and browserbase_api_key.strip()
-        )
+        self._credentials = {
+            ProviderName.BROWSERBASE: (
+                "Browserbase",
+                "API key",
+                "browserbase_api_key",
+                browserbase_api_key,
+            ),
+            ProviderName.BROWSERLESS_CLOUD: (
+                "Browserless cloud",
+                "token",
+                "browserless_cloud_token",
+                browserless_cloud_token,
+            ),
+        }
 
     async def ensure(
         self,
@@ -90,15 +102,13 @@ class ExternalCapacityRepository:
         unknown = set(values) - allowed
         if unknown:
             raise ValueError(f"Unknown external capacity fields: {sorted(unknown)}")
-        if (
-            provider is ProviderName.BROWSERBASE
-            and values.get("enabled") is True
-            and not self._browserbase_api_key_configured
-        ):
-            raise ExternalCapacityEnablementError(
-                "Cannot enable Browserbase because its API key is not configured. "
-                "Configure browserbase_api_key and restart Stolosio."
-            )
+        if provider in self._credentials and values.get("enabled") is True:
+            name, kind, setting, credential = self._credentials[provider]
+            if not (credential and credential.strip()):
+                raise ExternalCapacityEnablementError(
+                    f"Cannot enable {name} because its {kind} is not configured. "
+                    f"Configure {setting} and restart Stolosio."
+                )
         async with self._sessions.begin() as database:
             await self._lock_provider(database, provider)
             row = await database.get(

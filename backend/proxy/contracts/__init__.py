@@ -14,6 +14,7 @@ from backend.proxy.contracts.session import (
     StolosioSession,
 )
 from backend.proxy.contracts.settings import (
+    BrowserlessSettingSchema,
     ProviderSelection,
     ProviderSettingSchema,
     RequestedSessionSettings,
@@ -25,6 +26,7 @@ from backend.proxy.contracts.settings import (
 
 __all__ = [
     "ACTIVE_PROVIDERS",
+    "BrowserlessSettingSchema",
     "PROMOTION_PROVIDERS",
     "ProviderAdapter",
     "ProviderAttempt",

@@ -55,6 +55,15 @@ browserbase:
   projectIdSecretKey: project-id
 ```
 
+The Browserless cloud token (for `/v1/capture`'s challenge resolution and the
+`browserless_cloud` provider) is read the same way:
+
+```yaml
+browserlessCloud:
+  existingSecret: stolosio-browserless-cloud
+  tokenSecretKey: token
+```
+
 Global `imagePullSecrets`, `podAnnotations`, `podLabels`, `nodeSelector`, `affinity`,
 and `tolerations` apply to Stolosio application Pods. `workloadAnnotations` applies to
 Deployment metadata and can be used by secret operators that restart workloads after

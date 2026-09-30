@@ -48,6 +48,7 @@ import type {
 const providerLabels: Record<ActivityProvider, string> = {
   http: "HTTP",
   browserbase: "Browserbase",
+  browserless_cloud: "Browserless cloud",
   browserless: "Browserless",
 }
 

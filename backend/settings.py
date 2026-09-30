@@ -34,9 +34,18 @@ class Settings(BaseSettings):
     session_event_retention_days: int = 30
     terminal_session_retention_days: int = 90
     domain_history_retention_days: int = 365
+    capture_method_cache_retention_days: int = 30
+    capture_default_deadline_ms: int = 120_000
     retention_delete_batch_size: int = 10_000
     browserless_url: AnyUrl = AnyUrl("ws://localhost:3000")
     browserless_session_timeout_seconds: int = 600
+    # Browserless cloud (paid): stealth browsers behind residential proxies. Credentials and
+    # endpoint only; whether it's enabled and how many run at once is operator policy
+    # (external_provider_limits).
+    browserless_cloud_url: AnyUrl = AnyUrl("https://production-sfo.browserless.io")
+    browserless_cloud_token: str = ""
+    browserless_cloud_proxy_country: str = "jp"
+    browserless_cloud_session_timeout_seconds: int = 300
     browserbase_api_url: AnyUrl = AnyUrl("https://api.browserbase.com/v1")
     browserbase_api_key: str = ""
     browserbase_project_id: str | None = None

@@ -47,6 +47,7 @@ const providers: { label: string; value: ActivityProvider }[] = [
   { label: "HTTP", value: "http" },
   { label: "Browserbase", value: "browserbase" },
   { label: "Browserless", value: "browserless" },
+  { label: "Browserless cloud", value: "browserless_cloud" },
 ]
 
 const eventTypes = [
@@ -69,6 +70,7 @@ const eventTypes = [
   "javascript.exception",
   "provider.disconnected",
   "execution.transitioned",
+  "capture.completed",
 ] as const
 
 type ActivityEventType = (typeof eventTypes)[number]
@@ -99,6 +101,7 @@ const operationalEventTypes: ActivityEventType[] = [
   "page.crashed",
   "provider.disconnected",
   "execution.transitioned",
+  "capture.completed",
 ]
 
 const standardEventTypes = eventTypes.filter(
@@ -309,6 +312,7 @@ function eventTone(event: ActivityEvent) {
 
 function providerTone(provider: ActivityProvider | null) {
   if (provider === "browserbase") return "text-violet-300"
+  if (provider === "browserless_cloud") return "text-fuchsia-300"
   if (provider === "browserless") return "text-cyan-300"
   if (provider === "http") return "text-amber-200"
   return "text-slate-500"
