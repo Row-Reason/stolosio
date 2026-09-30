@@ -1,12 +1,14 @@
 """Benchmark the challenge-resolution tier on bot-protected pages.
 
     uv run python benchmarks/challenge.py run data/challenge_benchmark_urls.tsv results/challenge.jsonl
+    uv run python benchmarks/challenge.py run data/challenge_benchmark_urls.tsv results/deployed.jsonl --endpoint URL
     uv run python benchmarks/challenge.py report results/challenge.jsonl
 
 Each URL gets a full production capture with resolve_bot_challenges=True (PAGECAPTURE_CHALLENGE_BROWSER_WS), so
 the result is what a caller would get: plain HTTP first, the managed fleet where HTTP isn't challenged today, and the
 challenge tier only where the ladder sends it. Pages were labelled as bot-protected at some point; many are not
-challenged today, which the report shows separately. Runs are appended and resumable.
+challenged today, which the report shows separately. With --endpoint, captures go through a deployed service (its
+challenge tier and shared method cache). Runs are appended and resumable.
 """
 
 import argparse
@@ -15,7 +17,7 @@ import json
 import statistics
 from collections import Counter
 
-from _harness import quantile, run_jsonl
+from _harness import Endpoint, quantile, run_jsonl
 
 from pagecapture import CaptureRequest, CaptureService
 from pagecapture.config import Settings
@@ -31,9 +33,13 @@ def text_chars(body: bytes) -> int:
     )
 
 
-async def capture_one(service: CaptureService, url: str, kind: str) -> dict:
-    result = await service.capture(CaptureRequest(url=url, resolve_bot_challenges=True))
-    out = result.to_json(include_body=False)
+async def capture_one(service: CaptureService | Endpoint, url: str, kind: str) -> dict:
+    if isinstance(service, Endpoint):
+        out, body, _ = await service.capture(url, resolve_bot_challenges=True)
+    else:
+        result = await service.capture(CaptureRequest(url=url, resolve_bot_challenges=True))
+        out = result.to_json(include_body=False)
+        body = result.document.body if result.document is not None else None
     tiers = [a["tier"] for a in out["evidence"]["attempts"]]
     challenge = next((a for a in out["evidence"]["attempts"] if a["tier"] == "challenge_resolution"), None)
     rec = {
@@ -52,13 +58,13 @@ async def capture_one(service: CaptureService, url: str, kind: str) -> dict:
         rec["unblock"] = next(
             (s["step"] for s in challenge.get("steps") or [] if s["step"].startswith("unblock")), None
         )
-    if result.document is not None and result.outcome == "captured":
-        rec["text_chars"] = text_chars(result.document.body)
+    if body is not None and out["outcome"] == "captured":
+        rec["text_chars"] = text_chars(body)
     return rec
 
 
-async def run(rows: list[tuple[str, str]], out: str, parallel: int) -> None:
-    service = CaptureService(Settings())
+async def run(rows: list[tuple[str, str]], out: str, parallel: int, endpoint: str | None) -> None:
+    service = Endpoint(endpoint) if endpoint else CaptureService(Settings())
     await run_jsonl(
         rows,
         out,
@@ -136,6 +142,7 @@ def main() -> None:
     r.add_argument("urls")
     r.add_argument("out")
     r.add_argument("--parallel", type=int, default=4)
+    r.add_argument("--endpoint", help="a deployed capture service's base URL (default: in-process)")
     p = sub.add_parser("report")
     p.add_argument("results")
     args = parser.parse_args()
@@ -143,7 +150,7 @@ def main() -> None:
         rows = [
             tuple(line.split("\t")) for line in open(args.urls).read().splitlines() if line and not line.startswith("#")
         ]
-        asyncio.run(run(rows, args.out, args.parallel))
+        asyncio.run(run(rows, args.out, args.parallel, args.endpoint))
     else:
         report(args.results)
 

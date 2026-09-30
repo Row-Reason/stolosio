@@ -1,9 +1,13 @@
-"""Shared benchmark plumbing: resumable JSONL runs and quantiles."""
+"""Shared benchmark plumbing: resumable JSONL runs, quantiles and captures through a deployed endpoint."""
 
 import asyncio
+import base64
 import json
 import sys
+import time
 from collections.abc import Awaitable, Callable, Iterable
+
+import httpx
 
 
 def done_keys(out: str, key: Callable[[dict], object]) -> set:
@@ -49,3 +53,28 @@ def quantile(xs, q: float) -> float:
     """The q-quantile (nearest rank below) of xs; 0 when empty."""
     xs = sorted(xs)
     return xs[int(q * (len(xs) - 1))] if xs else 0.0
+
+
+class Endpoint:
+    """A deployed capture service (POST {base}/v1/capture), for benchmarking what callers actually get."""
+
+    def __init__(self, base: str) -> None:
+        self._client = httpx.AsyncClient(base_url=base.rstrip("/"), timeout=httpx.Timeout(300, connect=10))
+
+    async def capture(self, url: str, **fields) -> tuple[dict, bytes | None, float]:
+        """The capture's response JSON (without the body), its body, and the seconds the answering request took.
+        A 503 capacity refusal is waited out (Retry-After) and not counted: it measures the fleet, not the capture."""
+        while True:
+            started = time.monotonic()
+            response = await self._client.post("/v1/capture", json={"url": url, **fields})
+            if response.status_code == 503:
+                await asyncio.sleep(float(response.headers.get("Retry-After", 5)))
+                continue
+            response.raise_for_status()
+            out = response.json()
+            document = out.get("document") or {}
+            encoded = document.pop("body_base64", None)
+            return out, base64.b64decode(encoded) if encoded is not None else None, time.monotonic() - started
+
+    async def close(self) -> None:
+        await self._client.aclose()
