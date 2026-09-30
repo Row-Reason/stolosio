@@ -134,7 +134,8 @@ function NetworkPolicySettings({ policy }: { policy: NetworkPolicy }) {
           <div>
             <h2 className="font-semibold">Global domain blocklist</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Block matching requests in every Stolosio session and capture.
+              Block ad, tracker and other page requests to these hosts in every
+              session and capture. Sessions can still navigate to them.
             </p>
           </div>
           <Badge
