@@ -1,0 +1,22 @@
+{
+  "url": "https://news.example.test/articles/42",
+  "resolve_bot_challenges": false,
+  "exclusions": [
+    {
+      "host": "*.ads.example.test",
+      "path_prefix": "/"
+    },
+    {
+      "host": "*",
+      "path_prefix": "/wp-admin"
+    }
+  ],
+  "accept": [
+    "text/html",
+    "application/xhtml+xml",
+    "application/xml",
+    "text/xml"
+  ],
+  "reference": "3f0c7a52-6f7e-4d8e-9f64-0d1c2b6a9e11",
+  "deadline_ms": 120000
+}

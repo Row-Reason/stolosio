@@ -23,6 +23,9 @@ WS /v1/connect
 ## Architectural boundaries
 
 - `backend/api/` owns HTTP/WebSocket transport and application lifecycle only.
+- `packages/pagecapture/` (a uv workspace package) owns the page-capture algorithm and its
+  contract (`packages/pagecapture/docs/api.md`, JSON examples in `contract/`). It knows nothing
+  of stolosio: the host plugs in its fetcher, browser tiers and method-cache storage.
 - `backend/proxy/` owns planning, settings resolution, admission, provider adapters,
   session lifecycle, and protocol transport.
 - Provider adapters satisfy Stolosio's internal contract; they do not define the public

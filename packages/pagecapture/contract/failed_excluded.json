@@ -1,0 +1,50 @@
+{
+  "schema": "2",
+  "reference": "3f0c7a52-6f7e-4d8e-9f64-0d1c2b6a9e11",
+  "outcome": "failed",
+  "requested_url": "https://news.example.test/login",
+  "final_url": "https://news.example.test/login",
+  "started_at": "2026-09-30T09:12:03.120Z",
+  "finished_at": "2026-09-30T09:12:27.201Z",
+  "response": null,
+  "document": null,
+  "failure": {
+    "code": "excluded",
+    "category": "content",
+    "transient": false,
+    "message": "redirected to an excluded URL: https://news.example.test/wp-admin/",
+    "retry_after_seconds": null,
+    "resolution_attempted": null
+  },
+  "evidence": {
+    "attempts": [
+      {
+        "path": "http",
+        "tier": "direct",
+        "status_code": null,
+        "duration_ms": 51.0,
+        "assessment": {
+          "primary": null,
+          "reasons": [],
+          "completeness": null,
+          "confidence": null
+        },
+        "decision": "fail",
+        "decision_reason": "redirected to an excluded URL: https://news.example.test/wp-admin/",
+        "steps": [],
+        "notes": [],
+        "comparison": null
+      }
+    ],
+    "cost": {
+      "browser_seconds": 0.0,
+      "paid": false,
+      "bytes": 0
+    },
+    "versions": {
+      "pagecapture": "0.2.0",
+      "classifier": "rules",
+      "renderer": "adaptive-4"
+    }
+  }
+}

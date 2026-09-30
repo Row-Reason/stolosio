@@ -1,0 +1,76 @@
+{
+  "schema": "2",
+  "reference": "3f0c7a52-6f7e-4d8e-9f64-0d1c2b6a9e11",
+  "outcome": "failed",
+  "requested_url": "https://news.example.test/articles/42",
+  "final_url": "https://news.example.test/articles/42",
+  "started_at": "2026-09-30T09:12:03.120Z",
+  "finished_at": "2026-09-30T09:12:27.201Z",
+  "response": {
+    "status_code": 429,
+    "headers": [
+      [
+        "content-type",
+        "text/html"
+      ],
+      [
+        "retry-after",
+        "120"
+      ]
+    ],
+    "redirects": []
+  },
+  "document": {
+    "representation": "response_body",
+    "media_type": "text/html",
+    "charset": null,
+    "content_sha256": "aa66ed2dcc7266cd1decf97294af60c7c7f52bb4f4ae1c6c89ab465b7e854a2a",
+    "content_bytes": 52,
+    "body_base64": "PGh0bWw+PGJvZHk+PGgxPlRvbyBNYW55IFJlcXVlc3RzPC9oMT48L2JvZHk+PC9odG1sPg=="
+  },
+  "failure": {
+    "code": "rate_limited",
+    "category": "website",
+    "transient": true,
+    "message": "HTTP 429",
+    "retry_after_seconds": 120.0,
+    "resolution_attempted": null
+  },
+  "evidence": {
+    "attempts": [
+      {
+        "path": "http",
+        "tier": "direct",
+        "status_code": 429,
+        "duration_ms": 143.2,
+        "assessment": {
+          "primary": "rate_limited",
+          "reasons": [
+            {
+              "code": "rate_limited",
+              "confidence": 0.99,
+              "source": "rule"
+            }
+          ],
+          "completeness": null,
+          "confidence": 0.99
+        },
+        "decision": "fail",
+        "decision_reason": "rate_limited",
+        "steps": [],
+        "notes": [],
+        "comparison": null
+      }
+    ],
+    "cost": {
+      "browser_seconds": 0.0,
+      "paid": false,
+      "bytes": 52
+    },
+    "versions": {
+      "pagecapture": "0.2.0",
+      "classifier": "rules",
+      "renderer": "adaptive-4"
+    }
+  }
+}

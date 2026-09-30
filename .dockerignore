@@ -14,3 +14,9 @@ build
 *.egg-info
 admin
 public-site
+
+# pagecapture: only the library goes into the image
+packages/*/benchmarks
+packages/*/data
+packages/*/docs
+packages/*/tests

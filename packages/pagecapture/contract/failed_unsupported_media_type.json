@@ -1,0 +1,63 @@
+{
+  "schema": "2",
+  "reference": "3f0c7a52-6f7e-4d8e-9f64-0d1c2b6a9e11",
+  "outcome": "failed",
+  "requested_url": "https://news.example.test/report.pdf",
+  "final_url": "https://news.example.test/report.pdf",
+  "started_at": "2026-09-30T09:12:03.120Z",
+  "finished_at": "2026-09-30T09:12:27.201Z",
+  "response": {
+    "status_code": 200,
+    "headers": [
+      [
+        "content-type",
+        "application/pdf"
+      ],
+      [
+        "content-length",
+        "482113"
+      ]
+    ],
+    "redirects": []
+  },
+  "document": null,
+  "failure": {
+    "code": "unsupported_media_type",
+    "category": "content",
+    "transient": false,
+    "message": "media type application/pdf is not accepted",
+    "retry_after_seconds": null,
+    "resolution_attempted": null
+  },
+  "evidence": {
+    "attempts": [
+      {
+        "path": "http",
+        "tier": "direct",
+        "status_code": 200,
+        "duration_ms": 88.4,
+        "assessment": {
+          "primary": null,
+          "reasons": [],
+          "completeness": null,
+          "confidence": null
+        },
+        "decision": "fail",
+        "decision_reason": "media type application/pdf not accepted",
+        "steps": [],
+        "notes": [],
+        "comparison": null
+      }
+    ],
+    "cost": {
+      "browser_seconds": 0.0,
+      "paid": false,
+      "bytes": 0
+    },
+    "versions": {
+      "pagecapture": "0.2.0",
+      "classifier": "rules",
+      "renderer": "adaptive-4"
+    }
+  }
+}
