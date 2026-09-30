@@ -17,7 +17,11 @@ POST /v1/capture
 - Existing CDP and Playwright `connect_over_cdp()` clients should need only a URL
   change.
 - Stolosio-owned connection settings use the `stolosio.*` query namespace.
-- Explicit query settings override Stolosio's automatic plan, which overrides defaults.
+- `/v1/connect` connects directly to the named provider (`stolosio.provider.slug`,
+  default `browserless`). There is no automatic routing, and a session never moves to
+  another provider.
+- `/v1/capture` owns its method choice (plain HTTP or a browser render) and remembers
+  it in the capture method cache; callers do not pick a provider.
 - Do not expose provider addresses or add provider names to public route paths.
 - Unsupported behavior must return an explicit protocol error. Never silently succeed,
   lose HTML, or substitute materially different behavior.
@@ -28,7 +32,7 @@ POST /v1/capture
 - `packages/pagecapture/` (a uv workspace package) owns the page-capture algorithm and its
   contract (`packages/pagecapture/docs/api.md`, JSON examples in `contract/`). It knows nothing
   of stolosio: the host plugs in its fetcher, browser tiers and method-cache storage.
-- `backend/proxy/` owns planning, settings resolution, admission, provider adapters,
+- `backend/proxy/` owns settings resolution, admission, provider adapters,
   session lifecycle, and protocol transport.
 - Provider adapters satisfy Stolosio's internal contract; they do not define the public
   API.
@@ -49,25 +53,21 @@ POST /v1/capture
 
 ## Product invariants
 
-- DEBUG events are filtered, normalized observations of what happened—not diagnoses,
-  recommendations, or routing decisions.
+- DEBUG events are filtered, normalized observations of what happened—not diagnoses
+  or recommendations.
 - Keep sensitive headers, credentials, cookies, query values, and page data out of
   events unless an explicit, tested redaction policy permits them.
-- No-browser execution initially covers `page.goto`, `page.content`, and the
-  declarative `Emulation.setScriptExecutionDisabled` setting. Every other
-  non-bootstrap command triggers a real browser journey; add static behavior one
-  command at a time with tests.
-- The optimizer minimizes browser, proxy, and helper-service spend subject to
-  correctness. Cost reduction never outranks correct acquisition.
+- Capture minimizes browser, proxy, and helper-service spend subject to correctness.
+  Cost reduction never outranks correct acquisition.
 - Stolosio owns browser fleet policy, desired capacity, placement, health, and draining.
   Docker, Kubernetes, or another platform supplies compute through a separate Stolosio
   fleet controller.
 - Administrative fleet limits are not downstream session settings and cannot be
   overridden through `stolosio.*` query parameters.
-- PostgreSQL is authoritative for operator-editable fleet, provider-capacity, and
-  routing policy. Startup may seed missing rows with product defaults but must never
-  reconcile saved values from environment variables. Keep environment configuration
-  for credentials, service endpoints, connection details, and process/runtime
+- PostgreSQL is authoritative for operator-editable fleet, provider-capacity,
+  cost-rate, and network policy. Startup may seed missing rows with product defaults
+  but must never reconcile saved values from environment variables. Keep environment
+  configuration for credentials, service endpoints, connection details, and process/runtime
   mechanics.
 - Prefer the smallest implementation that satisfies the current milestone. Roadmap
   documents describe direction, not permission to build speculative abstractions.
@@ -159,8 +159,7 @@ npm run build
   on the admission path.
 - Treat provider connections and DEBUG consumers as backpressured streams with bounded
   failure behavior.
-- Store the requested settings, resolved settings, source of each setting, and policy
-  version whenever planning behavior evolves.
+- Store the requested settings, resolved settings, and source of each setting.
 - Do not add native-provider escape hatches or speculative provider-specific public APIs.
 - Leave intentionally scaffolded routes explicit rather than returning misleading
   placeholder data.

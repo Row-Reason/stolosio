@@ -1,24 +1,24 @@
 # Architecture
 
-Stolosio presents one downstream endpoint:
+Stolosio presents two downstream endpoints:
 
 ```text
-WS /v1/connect
+WS   /v1/connect
+POST /v1/capture
 ```
 
 Existing CDP and Playwright `connect_over_cdp()` clients should need only a URL change.
 Stolosio settings use the `stolosio.*` query namespace; provider addresses and credentials
-are never public API.
+are never public API. `POST /v1/capture` returns one page and chooses its own method
+(see [Page capture](CAPTURE.md)).
 
 ## Acquisition clients
 
-Clients that know they require browser execution can set
-`stolosio.session.browser_required=true`. Automatic routing then excludes HTTP and
-acquires an eligible browser before accepting the WebSocket. The existing planner
-still owns enabled providers, capacity and explicit paid-fallback permission.
-An explicit browser provider is honored; explicit HTTP conflicts with this requirement
-and is rejected as invalid settings. Omitting the requirement retains lazy HTTP
-execution and live escalation.
+A `/v1/connect` session connects directly to the provider named by
+`stolosio.provider.slug`. Without it, the session uses `browserless`, the local
+Stolosio-managed fleet. The only other provider is paid `browserless_cloud`, used only
+when named and when an operator has enabled its capacity. Stolosio acquires the browser
+before accepting the WebSocket, and the session never moves to another provider.
 
 `stolosio.session.admission_timeout_ms` (1–60,000) bounds the combined network-policy
 lookup, logical-session admission, provider queue/acquisition and WebSocket acceptance.
@@ -32,11 +32,7 @@ Capacity-full, provider-queue timeout and session-admission timeout denials use 
 remain 503/504. After acceptance, existing CDP/WebSocket errors apply. Clients should
 jitter capacity retries and avoid counting pre-accept denials as page captures.
 
-Periplus opts into these settings with `PERIPLUS_CDP_STOLOSIO=true`, deriving the
-browser requirement from its capture policy. Deploy support here before enabling
-that integration.
-Periplus closes CDP after collecting bytes, before archive persistence; Stolosio
-releases the associated provider slot through normal disconnect cleanup.
+Periplus acquires pages through `POST /v1/capture` rather than CDP.
 
 ## Data path
 
@@ -45,42 +41,26 @@ downstream CDP
       |
  FastAPI WebSocket
       |
- admission + planner
-   /       |        \
- HTTP  Browserless  Browserbase
- facade   worker CDP  session CDP
+     admission
+    /         \
+ Browserless   Browserless cloud
+ worker CDP    session CDP
 ```
 
-The HTTP facade implements only its explicitly tested contract. Browserless and
-Browserbase are opaque, bidirectional CDP transports. Stolosio validates the JSON
+Both providers are opaque, bidirectional CDP transports. Stolosio validates the JSON
 envelope needed for correlation and observation, but it does not decide whether an
-individual browser method is supported.
-
-An automatic session may make one HTTP-to-browser escalation. It cannot move from one
-browser provider to another. One Stolosio browser attempt owns one upstream browser
+individual browser method is supported. One Stolosio attempt owns one upstream browser
 session for its lifetime.
 
-## Promotion and escalation
-
-Promotion and escalation are separate mechanisms:
-
-- **Promotion** is background policy work. Probes compare HTTP and Browserless results,
-  then update durable domain evidence used by future plans. Promotion never changes a
-  live session.
-- **Escalation** is a live correctness path. An automatic HTTP session immediately
-  acquires a browser when HTTP cannot execute a CDP method or its origin status,
-  headers, response size, or content sanity check fails. Proxy failures and
-  network-policy denials are terminal.
-
-Browserbase is never probed automatically and never contributes promotion evidence.
-Operators may run an explicit paid diagnostic probe. When enabled,
-Stolosio assumes it works and keeps it as the terminal escalation candidate. Failure
-there is terminal because Stolosio has no more capable provider to try.
+Page capture uses the same admission and capacity. It fetches plain HTTP through the
+egress proxy and renders on a local Browserless slot when HTTP is not enough; the per-URL
+method cache in PostgreSQL (`capture_method_cache`) records where plain HTTP was
+confirmed sufficient.
 
 ## Capacity
 
 PostgreSQL transactionally owns logical-session admission, provider queues, leases,
-Browserless slot assignments, and Browserbase external quota.
+Browserless slot assignments, and Browserless cloud external quota.
 
 Browserless workers form a managed fleet. A worker exposes multiple independent
 session slots, and a separate fleet controller reconciles desired workers against
@@ -91,11 +71,10 @@ The Kubernetes/k3s runtime uses a Stolosio-owned StatefulSet so ordinal scale-do
 be drained safely. Helm and GitOps own a static workload template rather than the live
 replica count. See [Kubernetes and k3s](KUBERNETES.md).
 
-Browserbase is external capacity. Stolosio applies an administrator-configured active
-session and queue limit before calling the Browserbase Sessions API. Automatic use
-also requires an explicit per-session paid-fallback opt-in, and Browserbase is never
-the first automatic candidate. This limit can
-track the subscription ceiling or enforce a stricter cost budget.
+Browserless cloud is external capacity. Stolosio applies an administrator-configured
+active session and queue limit before connecting to it, and uses it only when a session
+names it or a capture resolves a bot challenge. This limit can track the subscription
+ceiling or enforce a stricter cost budget.
 
 ## Lifecycle and observations
 
@@ -106,7 +85,10 @@ Stolosio derives:
 - capacity-occupied time;
 - browser-connected time;
 - provider-reported browser time; and
-- estimated billable time.
+- chargeable time.
+
+Each attempt is charged its capacity-occupied time, from acquisition to release, times
+its provider's operator-managed rate (`provider_cost_rates`, cost units per second).
 
 CDP commands receive timestamps at receipt, upstream forwarding, and terminal
 response. Prometheus observes bounded command-domain latency. Generic successful
@@ -125,15 +107,16 @@ parameters, page data, credentials, or diagnoses.
 
 PostgreSQL stores Stolosio's operator-managed global domain blocklist. Each provider
 attempt snapshots the current policy version. Browser attempts apply the list to
-newly attached network-capable CDP targets before exposing them downstream; the HTTP
-facade applies it to navigation and every redirect. Clients cannot override administrative
+newly attached network-capable CDP targets before exposing them downstream; capture's
+plain HTTP fetch applies it to every redirect hop. Clients cannot override administrative
 network policy through `stolosio.*` query parameters. See
 [Network policy](NETWORK_POLICY.md).
 
 ## Process boundaries
 
 - `backend/api/` owns HTTP/WebSocket transport and application lifecycle.
-- `backend/proxy/` owns planning, settings, admission, adapters, and protocol transport.
+- `backend/proxy/` owns settings, admission, adapters, capture hosting, and protocol
+  transport.
 - PostgreSQL is the durable source of truth.
 - NATS Core handles live coordination; JetStream handles durable observation delivery.
 - Fleet controllers reconcile infrastructure separately from FastAPI.

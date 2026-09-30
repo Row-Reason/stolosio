@@ -126,7 +126,7 @@ class CaptureRunner:
         resolved = ResolvedSessionSettings(
             provider=ProviderSettingSchema(slug=ProviderName.BROWSERLESS),
             session=SessionSettingSchema(),
-            sources={"stolosio.provider.slug": SettingSource.AUTO},
+            sources={"stolosio.provider.slug": SettingSource.EXPLICIT},
             blocked_domain_patterns=policy.blocked_domain_patterns,
             network_policy_version=policy.configuration_version,
         )

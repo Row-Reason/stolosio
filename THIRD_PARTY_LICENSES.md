@@ -29,5 +29,5 @@ source-availability requirements. Review the actual licenses for the versions an
 assets included in that distribution. This summary is not a complete third-party
 notice bundle or a completed redistribution audit.
 
-Browserbase is an external service governed by its own service terms. PostgreSQL,
+Browserless cloud is an external service governed by its own service terms. PostgreSQL,
 NATS, Chromium, and other software in deployment images also retain their own terms.

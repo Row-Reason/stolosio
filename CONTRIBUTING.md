@@ -16,7 +16,7 @@ uv run pytest -m "not e2e"
 
 PostgreSQL and NATS must be running for integration tests; otherwise some tests skip.
 For browser changes, also run `STOLOSIO_E2E=1 uv run pytest -m e2e` with the full
-Compose stack and fleet controller running. Browserbase checks require credentials
+Compose stack and fleet controller running. Browserless cloud checks require a token
 and may incur charges; the local provider tests do not require a paid account.
 
 For frontend changes, run from `admin/`:

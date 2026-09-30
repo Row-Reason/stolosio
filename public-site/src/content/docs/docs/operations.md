@@ -1,6 +1,6 @@
 ---
 title: Operate your fleet
-description: Manage capacity, provider queues, routing policy, and paid fallback.
+description: Manage capacity, provider queues, paid capacity, cost rates, and domain blocking.
 ---
 
 The protected admin interface for an installation is the operator's control surface. In local development it is available at `http://localhost:5173`.
@@ -25,20 +25,18 @@ The fleet controller is separate from the API. It reconciles desired browser cap
 
 In Kubernetes, scale-down drains the highest ordinal first and waits for live assignments to finish. Template replacement and session-capacity changes wait for zero demand. See the [deployment guide](/docs/kubernetes/).
 
-## Automatic routing
+## Providers are explicit
 
-Automatic sessions can begin with HTTP. Failed HTTP checks or unsupported commands trigger browser acquisition. Domain-level evidence from sessions and background probes informs future starting routes.
+A session connects to the provider it names and stays there; without a name it uses the managed Browserless fleet. Stolosio does not route sessions between providers.
 
-Once a browser is acquired, the session stays with that browser provider. Browser-to-browser live migration is not supported.
+Paid Browserless cloud requires a configured token and capacity an operator has enabled on the Fleets page. It is used only when a session names it, or when a capture request asks for bot-challenge resolution. Its active-session and queue limits apply to both.
 
-## Paid fallback is explicit
+## Cost rates
 
-Browserbase requires configured credentials and provider capacity. Automatic sessions must also opt in using `stolosio.provider.allow_paid_fallback=true`. Local candidates are exhausted first.
-
-Browserbase is never the primary automatic provider and is not probed automatically. An operator can explicitly request a paid diagnostic probe. Direct Browserbase selection remains available within admission limits.
+Every acquisition attempt is charged for the time it holds capacity, from acquisition to release, at its provider's rate in cost units per second. Operators set the rates on the Policy page; installation defaults are 100 for `browserless` and 300 for `browserless_cloud`. The Cost page reports the resulting totals.
 
 ## Domain blocking
 
-The same operator-managed domain blocklist applies to browser attempts. Stolosio returns `domain_blocking_unavailable` if it cannot apply the policy. The HTTP path checks top-level navigation and has no subresource requests to filter.
+The same operator-managed domain blocklist, edited on the Policy page, applies to every browser attempt and every capture. Stolosio returns `domain_blocking_unavailable` if it cannot apply the policy. Capture's plain HTTP fetch checks every redirect hop and has no subresource requests to filter.
 
 This policy does not replace network isolation. See [security](/docs/security/).

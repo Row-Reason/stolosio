@@ -8,24 +8,14 @@ from pydantic import BaseModel, Field
 from backend.proxy.contracts.provider import ProviderName
 
 
-class ProviderSelection(StrEnum):
-    AUTO = "auto"
-    HTTP = ProviderName.HTTP
-    BROWSERLESS = ProviderName.BROWSERLESS
-    BROWSERBASE = ProviderName.BROWSERBASE
-    BROWSERLESS_CLOUD = ProviderName.BROWSERLESS_CLOUD
-
-
 class SettingSource(StrEnum):
     EXPLICIT = "explicit"
-    AUTO = "auto"
     DEFAULT = "default"
     POLICY = "policy"
 
 
 class ProviderSettingSchema(BaseModel):
-    slug: ProviderName | None = None
-    allow_paid_fallback: bool = False
+    slug: ProviderName = ProviderName.BROWSERLESS
 
 
 class BrowserlessSettingSchema(BaseModel):
@@ -36,21 +26,12 @@ class BrowserlessSettingSchema(BaseModel):
 
 class SessionSettingSchema(BaseModel):
     reference: UUID | None = None
-    browser_required: bool = False
     admission_timeout_ms: int | None = Field(default=None, ge=1, le=60_000)
 
 
 @dataclass(frozen=True, slots=True)
 class RequestedSessionSettings:
     overrides: dict[str, Any] = field(default_factory=dict)
-    auto_fields: frozenset[str] = frozenset()
-
-    @property
-    def provider(self) -> ProviderSelection:
-        value = self.overrides.get("stolosio.provider.slug")
-        if value is None:
-            return ProviderSelection.AUTO
-        return ProviderSelection(value)
 
     @property
     def session_reference(self) -> UUID | None:
@@ -66,8 +47,3 @@ class ResolvedSessionSettings:
     browserless: BrowserlessSettingSchema = field(default_factory=BrowserlessSettingSchema)
     blocked_domain_patterns: tuple[str, ...] = ()
     network_policy_version: int = 1
-
-
-@dataclass(frozen=True, slots=True)
-class SettingsResolutionContext:
-    target_url: str | None = None

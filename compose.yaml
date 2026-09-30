@@ -86,24 +86,6 @@ services:
       nats:
         condition: service_started
 
-  health:
-    build: .
-    command: uv run python -m backend.workers.health
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      DATABASE_URL: postgresql+asyncpg://stolosio:stolosio@postgres:5432/stolosio
-      HEALTH_STOLOSIO_CDP_URL: ws://api:8000/v1/connect
-    volumes:
-      - .:/app
-      - /app/.venv
-    depends_on:
-      api:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-
   postgres:
     image: postgres:latest
     environment:

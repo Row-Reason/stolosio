@@ -46,11 +46,6 @@ class Settings(BaseSettings):
     browserless_cloud_token: str = ""
     browserless_cloud_proxy_country: str = "jp"
     browserless_cloud_session_timeout_seconds: int = 300
-    browserbase_api_url: AnyUrl = AnyUrl("https://api.browserbase.com/v1")
-    browserbase_api_key: str = ""
-    browserbase_project_id: str | None = None
-    browserbase_network_isolation_verified: bool = False
-    browserbase_session_timeout_seconds: int = 600
     stolosio_max_active_sessions: int = 100
     session_lease_seconds: float = 30
     session_heartbeat_seconds: float = 10
@@ -62,17 +57,6 @@ class Settings(BaseSettings):
     # Page acquisition must never inherit the API process's internal network access.
     http_fetch_proxy_url: str = "http://localhost:3128"
     http_max_response_bytes: int = 10 * 1024 * 1024
-    http_user_agent: str = "StolosioBot/0.1 (https://github.com/elei-io/stolosio)"
-    http_accept: str = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-    http_accept_language: str = "en-US,en;q=0.5"
-    provider_transition_replay_max_commands: int = 100
-    provider_transition_replay_max_bytes: int = 2 * 1024 * 1024
-    provider_transition_replay_timeout_seconds: float = 30
-    health_stolosio_cdp_url: str = "ws://localhost:8411/v1/connect"
-    health_schedule_delay_seconds: float = 2
-    health_poll_seconds: float = 1
-    health_lease_seconds: float = 60
-    health_browser_settle_seconds: float = 8
     fleet_reconcile_interval_seconds: float = 1
     fleet_observation_ttl_seconds: float = 5
     fleet_instance_startup_timeout_seconds: float = 30

@@ -2,9 +2,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import case, distinct, func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.db.models import AcquisitionAttempt, GatewaySession
+from backend.db.models import AcquisitionAttempt, GatewaySession, ProviderCostRate
 from backend.proxy.contracts import ProviderName
 
 
@@ -68,9 +69,6 @@ class CostQueryService:
                         ),
                         func.coalesce(
                             func.sum(AcquisitionAttempt.capacity_occupied_ms), 0
-                        ),
-                        func.coalesce(
-                            func.sum(AcquisitionAttempt.estimated_billable_ms), 0
                         ),
                     )
                     .where(*filters)
@@ -153,7 +151,6 @@ class CostQueryService:
                 "chargeable_time_ms": int(chargeable_time_ms),
                 "browser_connected_time_ms": int(browser_connected_time_ms),
                 "capacity_occupied_time_ms": int(capacity_occupied_time_ms),
-                "estimated_billable_time_ms": int(estimated_billable_time_ms),
             }
             for (
                 provider,
@@ -164,7 +161,6 @@ class CostQueryService:
                 chargeable_time_ms,
                 browser_connected_time_ms,
                 capacity_occupied_time_ms,
-                estimated_billable_time_ms,
             ) in provider_rows
         ]
         totals = {
@@ -186,11 +182,6 @@ class CostQueryService:
                 int(row["capacity_occupied_time_ms"])
                 for row in providers
                 if row["provider"] == ProviderName.BROWSERLESS.value
-            ),
-            "browserbase_billable_time_ms": sum(
-                int(row["estimated_billable_time_ms"])
-                for row in providers
-                if row["provider"] == ProviderName.BROWSERBASE.value
             ),
         }
         return {
@@ -235,3 +226,54 @@ class CostQueryService:
                 ) in recent_rows
             ],
         }
+
+
+_DEFAULT_COST_RATES = {
+    ProviderName.BROWSERLESS: 100,
+    ProviderName.BROWSERLESS_CLOUD: 300,
+}
+
+
+class CostRateRepository:
+    """Operator-set cost units per second of chargeable time, applied when attempts finish."""
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def ensure_defaults(self) -> None:
+        async with self._sessions.begin() as database:
+            await database.execute(
+                insert(ProviderCostRate)
+                .values(
+                    [
+                        {
+                            "provider": provider.value,
+                            "cost_units_per_second": cost,
+                            "updated_at": datetime.now(UTC),
+                        }
+                        for provider, cost in _DEFAULT_COST_RATES.items()
+                    ]
+                )
+                .on_conflict_do_nothing(index_elements=[ProviderCostRate.provider])
+            )
+
+    async def list(self) -> list[ProviderCostRate]:
+        async with self._sessions() as database:
+            return list(
+                await database.scalars(select(ProviderCostRate).order_by(ProviderCostRate.provider))
+            )
+
+    async def update(
+        self,
+        provider: ProviderName,
+        cost_units_per_second: int,
+    ) -> ProviderCostRate | None:
+        if cost_units_per_second < 0:
+            raise ValueError("Cost rates must be non-negative")
+        async with self._sessions.begin() as database:
+            row = await database.get(ProviderCostRate, provider.value, with_for_update=True)
+            if row is None:
+                return None
+            row.cost_units_per_second = cost_units_per_second
+            row.updated_at = datetime.now(UTC)
+            return row

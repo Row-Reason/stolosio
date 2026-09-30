@@ -10,12 +10,10 @@ from backend.api.routes.admin_command_costs import (
     router as admin_command_costs_router,
 )
 from backend.api.routes.admin_costs import router as admin_costs_router
-from backend.api.routes.admin_domains import router as admin_domains_router
 from backend.api.routes.admin_events import router as admin_events_router
 from backend.api.routes.admin_fleets import router as admin_fleets_router
 from backend.api.routes.admin_network import router as admin_network_router
 from backend.api.routes.admin_provider_capacity import router as admin_provider_capacity_router
-from backend.api.routes.admin_routing import router as admin_routing_router
 from backend.api.routes.admin_sessions import router as admin_sessions_router
 from backend.api.routes.capture import router as capture_router
 from backend.api.routes.debug import router as debug_router
@@ -40,19 +38,15 @@ from backend.proxy.attempts import AttemptAdmission
 from backend.proxy.capture import CaptureRunner
 from backend.proxy.command_costs import CommandCostQueryService
 from backend.proxy.contracts import ProviderName
-from backend.proxy.costs import CostQueryService
-from backend.proxy.domains import DomainQueryService
+from backend.proxy.costs import CostQueryService, CostRateRepository
 from backend.proxy.external_capacity import ExternalCapacityRepository
 from backend.proxy.gateway import Gateway
-from backend.proxy.health import PromotionRepository
 from backend.proxy.network_policy import NetworkPolicyRepository
 from backend.proxy.postgres import (
     PostgresAttemptRepository,
     PostgresSessionRepository,
     SessionRepositorySettings,
 )
-from backend.proxy.provider_transition import ProviderTransitionRepository
-from backend.proxy.routing import RoutingRepository
 from backend.proxy.session_queries import SessionQueryService
 from backend.proxy.sessions import SessionAdmission
 from backend.settings import settings
@@ -157,20 +151,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await ensure_managed_fleets(fleet_repository)
     external_capacity = ExternalCapacityRepository(
         session_factory,
-        browserbase_api_key=settings.browserbase_api_key,
         browserless_cloud_token=settings.browserless_cloud_token,
-    )
-    await external_capacity.ensure(
-        ProviderName.HTTP,
-        enabled=True,
-        max_active_sessions=100,
-        max_queued_attempts=100,
-    )
-    await external_capacity.ensure(
-        ProviderName.BROWSERBASE,
-        enabled=False,
-        max_active_sessions=5,
-        max_queued_attempts=100,
     )
     # Paid: disabled until an operator enables it. 15 concurrent is the Prototyping plan's limit.
     await external_capacity.ensure(
@@ -186,8 +167,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ),
     )
     attempt_repository = PostgresAttemptRepository(session_factory)
-    routing = RoutingRepository(session_factory)
-    await routing.ensure_defaults()
+    cost_rates = CostRateRepository(session_factory)
+    await cost_rates.ensure_defaults()
     network_policy = NetworkPolicyRepository(session_factory)
     await network_policy.ensure_defaults()
     notifier = DynamicCapacityNotifier()
@@ -207,21 +188,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.fleet = FleetSnapshotService(session_factory, settings)
     app.state.fleet_admin = FleetService(fleet_repository)
     app.state.external_capacity = external_capacity
-    app.state.routing = routing
     app.state.network_policy = network_policy
-    app.state.domains = DomainQueryService(session_factory)
     app.state.session_queries = SessionQueryService(session_factory)
     app.state.command_costs = CommandCostQueryService(session_factory)
     app.state.costs = CostQueryService(session_factory)
-    app.state.health = PromotionRepository(session_factory)
+    app.state.cost_rates = cost_rates
     app.state.activity_history = ActivityHistoryService(session_factory)
     app.state.gateway = Gateway(
         sessions,
         attempts,
         settings,
         event_publisher,
-        transition_repository=ProviderTransitionRepository(session_factory),
-        routing=routing,
         network_policy=network_policy,
     )
     app.state.capture = CaptureRunner(
@@ -249,8 +226,6 @@ app.include_router(admin_events_router)
 app.include_router(admin_fleets_router)
 app.include_router(admin_network_router)
 app.include_router(admin_provider_capacity_router)
-app.include_router(admin_domains_router)
-app.include_router(admin_routing_router)
 app.include_router(admin_sessions_router)
 app.include_router(capture_router)
 app.include_router(health_router)

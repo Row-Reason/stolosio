@@ -15,13 +15,13 @@ async def test_bootstrap_preserves_database_external_capacity(
 ) -> None:
     repository = ExternalCapacityRepository(database_sessions)
     initial = await repository.ensure(
-        ProviderName.BROWSERBASE,
+        ProviderName.BROWSERLESS_CLOUD,
         enabled=False,
         max_active_sessions=5,
         max_queued_attempts=100,
     )
     preserved = await repository.ensure(
-        ProviderName.BROWSERBASE,
+        ProviderName.BROWSERLESS_CLOUD,
         enabled=True,
         max_active_sessions=9,
         max_queued_attempts=40,
@@ -38,12 +38,12 @@ async def test_bootstrap_preserves_database_external_capacity(
 
 
 @pytest.mark.asyncio
-async def test_browserbase_cannot_be_enabled_without_an_api_key(
+async def test_browserless_cloud_cannot_be_enabled_without_a_token(
     database_sessions,
 ) -> None:
     repository = ExternalCapacityRepository(database_sessions)
     await repository.ensure(
-        ProviderName.BROWSERBASE,
+        ProviderName.BROWSERLESS_CLOUD,
         enabled=False,
         max_active_sessions=5,
         max_queued_attempts=100,
@@ -51,37 +51,37 @@ async def test_browserbase_cannot_be_enabled_without_an_api_key(
 
     with pytest.raises(
         ExternalCapacityEnablementError,
-        match="API key is not configured",
+        match="token is not configured",
     ):
         await repository.update(
-            ProviderName.BROWSERBASE,
+            ProviderName.BROWSERLESS_CLOUD,
             {"enabled": True},
             actor="test-operator",
         )
 
-    capacity = await repository.get(ProviderName.BROWSERBASE)
+    capacity = await repository.get(ProviderName.BROWSERLESS_CLOUD)
     assert capacity is not None
     assert capacity.enabled is False
     assert capacity.configuration_version == 1
 
 
 @pytest.mark.asyncio
-async def test_browserbase_can_be_enabled_when_api_key_is_configured(
+async def test_browserless_cloud_can_be_enabled_when_a_token_is_configured(
     database_sessions,
 ) -> None:
     repository = ExternalCapacityRepository(
         database_sessions,
-        browserbase_api_key="configured-secret",
+        browserless_cloud_token="configured-secret",
     )
     await repository.ensure(
-        ProviderName.BROWSERBASE,
+        ProviderName.BROWSERLESS_CLOUD,
         enabled=False,
         max_active_sessions=5,
         max_queued_attempts=100,
     )
 
     capacity = await repository.update(
-        ProviderName.BROWSERBASE,
+        ProviderName.BROWSERLESS_CLOUD,
         {"enabled": True},
         actor="test-operator",
     )

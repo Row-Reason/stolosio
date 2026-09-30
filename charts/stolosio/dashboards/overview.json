@@ -1356,68 +1356,6 @@
       }
     },
     {
-      "id": 24,
-      "type": "timeseries",
-      "title": "Provider transitions / second",
-      "description": "All provider transitions, independent of the provider filter.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$datasource"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 52,
-        "w": 12,
-        "h": 8
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (from_provider,to_provider,trigger) (rate(stolosio_provider_transitions_total{namespace=\"$namespace\",service=~\"$release-(api|maintenance|fleet-controller)-metrics\"}[$__rate_interval]))",
-          "legendFormat": "{{from_provider}} \u2192 {{to_provider}} \u00b7 {{trigger}}",
-          "range": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "min": 0,
-          "noValue": "No data",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 8,
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false
-        },
-        "colorMode": "value",
-        "graphMode": "area"
-      }
-    },
-    {
       "id": 25,
       "type": "timeseries",
       "title": "CDP outcomes / second",

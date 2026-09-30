@@ -1,36 +1,29 @@
 ---
 title: Providers & compatibility
-description: Understand HTTP acquisition, native CDP browser providers, and escalation boundaries.
+description: Understand the native CDP browser providers and how page capture chooses its method.
 ---
 
-| Path        | Intended role                                  | Capacity owner                       |
-| ----------- | ---------------------------------------------- | ------------------------------------ |
-| HTTP        | Bounded navigation and HTML retrieval          | Stolosio admission                   |
-| Browserless | Default browser path, managed horizontal fleet | Stolosio instances and slots         |
-| Browserbase | Optional external browser capacity             | Stolosio's configured external quota |
-
-## HTTP has a deliberately small surface
-
-The no-browser facade covers `page.goto`, `page.content`, the exact bootstrap commands those operations need, and declarative `Emulation.setScriptExecutionDisabled` state for replay.
-
-Every other non-bootstrap command requires a browser. Transport failure, non-success status, invalid HTML headers, excessive response size, or failed content sanity can also trigger browser acquisition.
-
-With forced HTTP selection, unsupported behavior returns a protocol error. Stolosio does not silently substitute materially different results.
+| Provider                                | Intended role                                                          | Capacity owner                       |
+| --------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------ |
+| Browserless (`browserless`)             | Default provider, managed horizontal fleet                             | Stolosio instances and slots         |
+| Browserless cloud (`browserless_cloud`) | Paid stealth browsers behind residential proxies, used only when named | Stolosio's configured external quota |
 
 ## Native CDP passthrough
 
-Browserless and Browserbase receive opaque CDP traffic. Stolosio preserves command IDs, session IDs, event order, backpressure, and close behavior. The selected browser determines whether an individual command is supported.
+Browserless and Browserless cloud receive opaque CDP traffic. Stolosio preserves command IDs, session IDs, event order, backpressure, and close behavior. The provider's browser determines whether an individual command is supported.
 
 One browser attempt owns one upstream browser session. Independent sessions can occupy separate slots on the same Browserless worker.
 
-## Escalation boundaries
+## One provider per session
 
-An automatic session can escalate from HTTP to one browser. Stolosio replays safe state, checks document readiness, and switches execution. Unsafe side effects are not replayed.
+A session connects to the provider named by `stolosio.provider.slug`, or `browserless` when omitted, and never switches providers. If that provider has no capacity, admission returns an explicit error.
 
-After browser acquisition, Stolosio does not switch browser providers. Exhausting the acquisition plan returns an explicit error.
+## Page capture
 
-## Browserbase and spend
+`POST /v1/capture` chooses its own method: a plain HTTP fetch through the egress proxy when that proves enough, otherwise a render on the managed fleet. A request that sets `resolve_bot_challenges` may use Browserless cloud, when an operator has enabled it, to get past a bot challenge. Stolosio remembers per URL where plain HTTP was confirmed sufficient.
 
-Automatic routing requires explicit paid-fallback permission as well as enabled quota. Browserbase is tried only after local candidates are exhausted. It is not automatically probed, and it is never the primary automatic provider.
+## Paid capacity and spend
+
+Browserless cloud requires a configured token as well as enabled quota. Every attempt is charged its capacity-occupied time at its provider's rate, which operators set on the admin Policy page.
 
 See [client settings](/docs/clients/) and the detailed [provider contract](https://github.com/elei-io/stolosio/blob/main/docs/PROVIDERS.md).

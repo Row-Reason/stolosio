@@ -17,9 +17,9 @@ async def main() -> None:
         page = await browser.new_page()
 
         await page.goto("https://example.com")
-        heading = await page.evaluate("document.querySelector('h1').textContent")
+        title = await page.evaluate("document.title")
 
-        assert heading == "Example Domain"
+        assert title == "Example Domain"
 
         print("JavaScript evaluation succeeded")
         await browser.close()

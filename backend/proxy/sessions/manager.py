@@ -83,11 +83,8 @@ class SessionAdmission:
             state=SessionState.REQUESTED,
         )
         requested_settings = {
-            **{field: "auto" for field in requested.auto_fields},
-            **{
-                field: str(value) if isinstance(value, UUID) else value
-                for field, value in requested.overrides.items()
-            },
+            field: str(value) if isinstance(value, UUID) else value
+            for field, value in requested.overrides.items()
         }
         status = await self._repository.admit(
             session,

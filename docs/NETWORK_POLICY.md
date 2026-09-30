@@ -49,9 +49,9 @@ If the provider rejects or times out while applying the policy, Stolosio closes 
 connection with `domain_blocking_unavailable` rather than continuing without the
 requested policy.
 
-The HTTP provider does not fetch page subresources. It applies the same policy to
-`Page.navigate` requests and every redirect and returns an explicit protocol error for a
-matching destination.
+Page capture's plain HTTP fetch does not fetch page subresources. It applies the same
+policy to the request URL and every redirect hop and fails the capture as `excluded` for
+a matching destination (see [Page capture](CAPTURE.md)).
 
 ## Public-only page acquisition
 
@@ -80,12 +80,11 @@ rule installation aborts startup. Do not grant privileged mode, host networking,
 or runtime access to Docker sockets. The runtime files must not be writable by
 Chromium. Container exec by an administrator remains a privileged operation.
 
-`HTTP_FETCH_PROXY_URL` is required for HTTP page requests (local default:
+`HTTP_FETCH_PROXY_URL` is required for capture's plain HTTP fetches (local default:
 `http://localhost:3128`). Compose and Helm configure it automatically. Environment
-proxy variables are ignored. Proxy errors and network-policy denials return a
-terminal protocol error; they do not escalate to a browser. Ordinary origin status
-or content failures still follow the existing escalation rules. Every HTTP redirect
-is checked against the attempt's domain blocklist before it is sent.
+proxy variables are ignored. The proxy's own error answers fail the capture as
+`unreachable`, and network-policy denials fail it as `excluded`; neither is retried in a
+browser. Every HTTP redirect is checked against the domain blocklist before it is sent.
 
 The Helm value `egress.extraBlockedCidrs` adds deployment-specific address ranges,
 including infrastructure using public IPs. For standalone containers, set the same
@@ -95,13 +94,9 @@ startup; recreate containers after changing resolver or interface configuration.
 
 Kubernetes NetworkPolicy remains an outer boundary and must restrict ingress to
 Browserless and the fetch proxy. It cannot replace the in-container rules for
-localhost. Deployments using Browserbase or other externally managed browser
-endpoints must independently verify their equivalent isolation before enabling
-those providers; the self-hosted firewall does not protect remote browsers.
-Browserbase acquisition is disabled unless the deployment explicitly sets
-`BROWSERBASE_NETWORK_ISOLATION_VERIFIED=true` (Helm:
-`browserbase.networkIsolationVerified`). This is an operator assertion after
-verification, not a mechanism that hardens the external provider.
+localhost. The self-hosted firewall does not protect remote browsers: Browserless
+cloud sessions run outside it, so only the domain blocklist, applied in the browser,
+constrains them.
 
 ### Verification
 
@@ -111,7 +106,6 @@ From the repository root:
 docker build -f runtime/Dockerfile.browserless -t stolosio-browserless:egress-test runtime
 docker build -f runtime/Dockerfile.fetch-proxy -t stolosio-fetch-proxy:egress-test runtime
 uv run python tests/runtime/check.py
-uv run pytest tests/proxy/test_provider_transition.py
 ```
 
 The container test uses disposable bridges and endpoints, checks successful public

@@ -1,1 +1,0 @@
-"""Provider health probe worker."""

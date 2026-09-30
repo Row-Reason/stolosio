@@ -35,7 +35,7 @@ def test_activity_history_route_parses_repeated_filters() -> None:
         "/v1/admin/events",
         params=[
             ("provider", "browserless"),
-            ("provider", "browserbase"),
+            ("provider", "browserless_cloud"),
             ("event_family", "attempt"),
             ("outcome", "failure"),
             ("occurred_after", "2026-07-18T01:00:00Z"),
@@ -48,7 +48,7 @@ def test_activity_history_route_parses_repeated_filters() -> None:
     assert response.json() == {"events": [], "next_cursor": None}
     assert [provider.value for provider in history.filters.providers] == [
         "browserless",
-        "browserbase",
+        "browserless_cloud",
     ]
     assert [family.value for family in history.filters.families] == ["attempt"]
     assert [outcome.value for outcome in history.filters.outcomes] == ["failure"]

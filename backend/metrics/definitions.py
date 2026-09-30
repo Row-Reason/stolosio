@@ -116,12 +116,6 @@ COMMAND_DURATION = Histogram(
     ("provider", "method", "outcome"),
     registry=REGISTRY,
 )
-PROVIDER_TRANSITIONS = Counter(
-    "stolosio_provider_transitions",
-    "Live sessions transitioned between providers by bounded trigger class.",
-    ("from_provider", "to_provider", "trigger"),
-    registry=REGISTRY,
-)
 EVENT_PUBLICATION_FAILURES = Counter(
     "stolosio_event_publication_failures",
     "Normalized events that could not be acknowledged by JetStream.",

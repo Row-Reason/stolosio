@@ -17,13 +17,8 @@ from backend.db.models.gateway import (
 from backend.db.models.observability import (
     Domain,
     DomainProviderCostStat,
-    DomainProviderHealth,
-    DomainProviderTransitionStat,
-    DomainRoutingPreference,
-    HealthProbe,
     ProviderCommandCostStat,
-    ProviderRoutingProfile,
-    RoutingConfiguration,
+    ProviderCostRate,
     SessionDomain,
 )
 
@@ -34,9 +29,6 @@ __all__ = [
     "ExternalProviderLimitEvent",
     "Domain",
     "DomainProviderCostStat",
-    "DomainProviderHealth",
-    "DomainRoutingPreference",
-    "DomainProviderTransitionStat",
     "FleetConfigurationEvent",
     "GatewaySession",
     "GatewayState",
@@ -45,9 +37,7 @@ __all__ = [
     "ProviderFleet",
     "ProviderInstance",
     "ProviderCommandCostStat",
-    "ProviderRoutingProfile",
-    "HealthProbe",
-    "RoutingConfiguration",
+    "ProviderCostRate",
     "SessionDomain",
     "SessionEventRecord",
 ]

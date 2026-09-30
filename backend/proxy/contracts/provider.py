@@ -8,27 +8,14 @@ if TYPE_CHECKING:
 
 
 class ProviderName(StrEnum):
-    HTTP = "http"
+    # The local browser fleet, and the default for /v1/connect.
     BROWSERLESS = "browserless"
-    BROWSERBASE = "browserbase"
     # Browserless's paid cloud (stealth browsers behind residential proxies): only when a client
     # names it, and as the capture endpoint's challenge-resolution tier.
     BROWSERLESS_CLOUD = "browserless_cloud"
 
 
-ACTIVE_PROVIDERS = (
-    ProviderName.HTTP,
-    ProviderName.BROWSERLESS,
-    ProviderName.BROWSERBASE,
-    ProviderName.BROWSERLESS_CLOUD,
-)
-
-# Browserbase is never probed automatically. Operators may explicitly request a
-# manual Browserbase probe when they accept the associated cost.
-PROMOTION_PROVIDERS = (
-    ProviderName.HTTP,
-    ProviderName.BROWSERLESS,
-)
+ACTIVE_PROVIDERS = tuple(ProviderName)
 
 
 class ProviderSession(Protocol):

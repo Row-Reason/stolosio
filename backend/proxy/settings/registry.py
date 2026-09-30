@@ -17,7 +17,6 @@ class RegisteredField:
     model_field: str
     query: str
     adapter: TypeAdapter[Any]
-    automatic: bool
 
 
 class StolosioSettingsRegistry:
@@ -39,7 +38,6 @@ class StolosioSettingsRegistry:
                     model_field=field_name,
                     query=query,
                     adapter=TypeAdapter(model_field.annotation),
-                    automatic=setting.automatic,
                 )
 
     @property
@@ -52,7 +50,6 @@ class StolosioSettingsRegistry:
 
     def parse(self, query_items: list[tuple[str, str]]) -> RequestedSessionSettings:
         overrides: dict[str, Any] = {}
-        auto_fields: set[str] = set()
         seen: set[str] = set()
 
         for query, raw_value in query_items:
@@ -62,21 +59,13 @@ class StolosioSettingsRegistry:
             if field is None or query in seen or not raw_value:
                 raise InvalidStolosioSettings
             seen.add(query)
-            if raw_value == "auto":
-                if not field.automatic:
-                    raise InvalidStolosioSettings
-                auto_fields.add(query)
-                continue
             try:
                 value = field.adapter.validate_python(raw_value)
             except ValidationError as error:
                 raise InvalidStolosioSettings from error
             overrides[query] = value
 
-        return RequestedSessionSettings(
-            overrides=overrides,
-            auto_fields=frozenset(auto_fields),
-        )
+        return RequestedSessionSettings(overrides=overrides)
 
     def defaults(self) -> dict[str, Any]:
         values: dict[str, Any] = {}

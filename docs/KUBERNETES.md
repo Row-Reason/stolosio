@@ -80,9 +80,9 @@ ghcr.io/elei-io/stolosio-admin
 oci://ghcr.io/elei-io/charts/stolosio
 ```
 
-The Stolosio image is shared by the API, migration Job, maintenance and health workers,
+The Stolosio image is shared by the API, migration Job, maintenance worker,
 and fleet controller. The matching `stolosio-browserless` image wraps pinned upstream Chromium with
-a mandatory outbound firewall. `stolosio-fetch-proxy` isolates HTTP page fetching.
+a mandatory outbound firewall. `stolosio-fetch-proxy` isolates capture's plain HTTP fetches.
 Both images need `NET_ADMIN` at startup, which their entrypoints drop before serving
 requests. See [Network policy](NETWORK_POLICY.md). There are no Stolosio-owned PostgreSQL or NATS
 images.
@@ -160,14 +160,13 @@ The chart runs `alembic upgrade head` as a Helm pre-install and pre-upgrade Job 
 the supplied PostgreSQL Secret. PostgreSQL and NATS themselves remain
 platform-managed.
 
-Browserbase is optional. When used, put its API key and project ID in an existing
-Secret and reference it:
+Browserless cloud is optional. When used, put its token in an existing Secret and
+reference it:
 
 ```yaml
-browserbase:
-  existingSecret: stolosio-browserbase
-  apiKeySecretKey: api-key
-  projectIdSecretKey: project-id
+browserlessCloud:
+  existingSecret: stolosio-browserless-cloud
+  tokenSecretKey: token
 ```
 
 Read the platform-assigned endpoints:

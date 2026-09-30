@@ -5,7 +5,7 @@ description: Your browser fleet. One endpoint. Deploy and operate the open-sourc
 
 import { LinkCard, CardGrid } from "@astrojs/starlight/components";
 
-Stolosio is an open-source, self-hosted browser and web-acquisition gateway. It gives your CDP-compatible automation one endpoint across a bounded HTTP path, a managed Browserless fleet, and optional Browserbase capacity.
+Stolosio is an open-source, self-hosted browser and web-acquisition gateway. It gives your CDP-compatible automation one endpoint for a managed Browserless fleet and optional paid Browserless cloud capacity, plus a capture endpoint that returns a page's content using the cheapest method that works.
 
 **Keep your automation. Use only the browser you need.**
 
@@ -26,7 +26,7 @@ ws://localhost:8411/v1/connect
   />
   <LinkCard
     title="Operate your fleet"
-    description="Understand capacity, routing, and paid fallback."
+    description="Understand capacity, queues, and paid capacity."
     href="/docs/operations/"
   />
   <LinkCard
@@ -38,9 +38,9 @@ ws://localhost:8411/v1/connect
 
 ## How it works
 
-Your client connects to Stolosio. An automatic session can begin with lightweight HTTP acquisition and escalate to a browser when navigation checks or a command require one. Once a browser is acquired, native CDP traffic passes through to it.
+Your client connects to Stolosio, which acquires a browser from the provider the session names, the managed Browserless fleet by default. Native CDP traffic then passes through to it. Clients that only need a page's content call `POST /v1/capture`, which fetches plain HTTP when that is enough and renders in a browser otherwise.
 
-Stolosio owns admission, queues, session lifecycle, fleet capacity, and routing. PostgreSQL is the durable source of truth. A separate fleet controller manages browser workers on Docker or Kubernetes.
+Stolosio owns admission, queues, session lifecycle, fleet capacity, and cost accounting. PostgreSQL is the durable source of truth. A separate fleet controller manages browser workers on Docker or Kubernetes.
 
 ## Current status
 

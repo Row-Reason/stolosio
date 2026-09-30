@@ -12,6 +12,7 @@ from backend.fleet import FleetInstanceState, FleetRepository, ObservedInstance
 from backend.messaging import PollingNotifier
 from backend.proxy.attempts import AttemptAdmission
 from backend.proxy.contracts import ProviderName, SessionState, StolosioSession
+from backend.proxy.costs import CostRateRepository
 from backend.proxy.errors import (
     GatewayCapacityFull,
     ProviderQueueFull,
@@ -23,7 +24,6 @@ from backend.proxy.postgres import (
     PostgresSessionRepository,
     SessionRepositorySettings,
 )
-from backend.proxy.routing import RoutingRepository
 from backend.proxy.sessions import SessionAdmission
 from backend.proxy.settings import stolosio_settings_resolver
 from backend.settings import Settings
@@ -92,13 +92,7 @@ async def external_provider_capacity(
 ) -> None:
     capacity = ExternalCapacityRepository(database_sessions)
     await capacity.ensure(
-        ProviderName.HTTP,
-        enabled=True,
-        max_active_sessions=100,
-        max_queued_attempts=100,
-    )
-    await capacity.ensure(
-        ProviderName.BROWSERBASE,
+        ProviderName.BROWSERLESS_CLOUD,
         enabled=True,
         max_active_sessions=5,
         max_queued_attempts=100,
@@ -183,23 +177,22 @@ async def test_transition_replacement_can_overlap_one_active_source_attempt(
     admission_settings: Settings,
 ) -> None:
     session = await admit(session_repository, admission_settings, "transition")
-    _, http = await stolosio_settings_resolver.resolve([("stolosio.provider.slug", "http")])
-    _, browserbase = await stolosio_settings_resolver.resolve(
-        [("stolosio.provider.slug", "browserbase")]
+    _, cloud = await stolosio_settings_resolver.resolve(
+        [("stolosio.provider.slug", "browserless_cloud")]
     )
     admissions = attempt_admission(attempt_repository, admission_settings)
-    source = await admissions.acquire(session.session, http)
+    source = await admissions.acquire(session.session, cloud)
     await source.activate()
 
     with pytest.raises(
         RuntimeError,
         match="already has a live acquisition attempt",
     ):
-        await admissions.acquire(session.session, browserbase)
+        await admissions.acquire(session.session, cloud)
 
     replacement = await admissions.acquire(
         session.session,
-        browserbase,
+        cloud,
         replacement_for=source.attempt.attempt_id,
     )
     await replacement.activate()
@@ -213,8 +206,8 @@ async def test_transition_replacement_can_overlap_one_active_source_attempt(
             )
         )
     assert [(row.provider, row.state) for row in rows] == [
-        ("http", "active"),
-        ("browserbase", "active"),
+        ("browserless_cloud", "active"),
+        ("browserless_cloud", "active"),
     ]
 
     await replacement.release()
@@ -339,7 +332,7 @@ async def test_stale_session_lease_frees_global_and_provider_capacity(
         database_sessions, SessionRepositorySettings(lease_seconds=2)
     )
     attempts = PostgresAttemptRepository(database_sessions)
-    await RoutingRepository(database_sessions).ensure_defaults()
+    await CostRateRepository(database_sessions).ensure_defaults()
     first = await admit(sessions, settings, "dead")
     _, resolved = await requested_and_resolved()
     first_attempt = await attempt_admission(attempts, settings).acquire(first.session, resolved)
@@ -486,9 +479,9 @@ async def test_retried_release_repairs_live_attempt_on_closed_session(
                 id=attempt_id,
                 session_id=session.session.session_id,
                 ordinal=1,
-                provider="browserbase",
-                resolved_settings={"stolosio.provider.slug": "browserbase"},
-                setting_sources={"stolosio.provider.slug": "auto"},
+                provider="browserless_cloud",
+                resolved_settings={"stolosio.provider.slug": "browserless_cloud"},
+                setting_sources={"stolosio.provider.slug": "explicit"},
                 state="active",
                 created_at=datetime.now(UTC) - timedelta(seconds=2),
                 active_at=datetime.now(UTC) - timedelta(seconds=1),

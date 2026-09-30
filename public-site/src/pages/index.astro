@@ -64,11 +64,11 @@ const repo = "https://github.com/elei-io/stolosio";
         </div>
         <div
           class="gateway"
-          aria-label="Illustration: a CDP client connects to Stolosio, which can use HTTP, a managed browser, or optional paid fallback"
+          aria-label="Illustration: clients connect to Stolosio, which captures pages over plain HTTP or uses a managed browser fleet or optional paid cloud browsers"
         >
           <div class="diagram-heading">
             <span>ACQUISITION, ORCHESTRATED</span><span class="diagram-tag"
-              >THE ROUTING MODEL</span
+              >THE ACQUISITION MODEL</span
             >
           </div>
           <div class="client-node">
@@ -78,10 +78,12 @@ const repo = "https://github.com/elei-io/stolosio";
               >
             </div><span class="node-label">CLIENT</span>
           </div>
-          <div class="connector"><span>WS /v1/connect</span></div>
+          <div class="connector">
+            <span>/v1/connect · capture</span>
+          </div>
           <div class="gateway-node">
             <span class="mini-mark">≋</span><strong>stolosio</strong><span
-              >One connection. A considered route.</span
+              >One front door. The right method.</span
             ><i></i>
           </div>
           <div class="branch-lines" aria-hidden="true">
@@ -91,10 +93,10 @@ const repo = "https://github.com/elei-io/stolosio";
             <div class="provider-node active">
               <span class="provider-index">01 / LIGHTWEIGHT</span><strong
                 >HTTP</strong
-              ><span>Skip the browser<br />when you can.</span><div
+              ><span>Capture skips the browser<br />when it can.</span><div
                 class="node-footer"
               >
-                <b></b> BOUNDED HTML PATH
+                <b></b> PAGE CAPTURE
               </div>
             </div>
             <div class="provider-node">
@@ -108,8 +110,8 @@ const repo = "https://github.com/elei-io/stolosio";
             </div>
             <div class="provider-node">
               <span class="provider-index">03 / OPTIONAL</span><strong
-                >Browserbase</strong
-              ><span>Paid fallback.<br />Explicitly enabled.</span><div
+                >Browserless cloud</strong
+              ><span>Paid stealth browsers.<br />Only when named.</span><div
                 class="node-footer"
               >
                 <b></b> NATIVE CDP
@@ -134,14 +136,14 @@ const repo = "https://github.com/elei-io/stolosio";
             A browser is a tool.<br />Not always the first step.
           </h2><p>
             Some pages only need an HTTP request. Others need the whole browser.
-            Stolosio gives both paths a single front door.
+            Stolosio gives both a single front door.
           </p>
         </div>
         <div class="benefits">
           <article>
             <span class="feature-number">01</span><h3>Start with less.</h3><p>
-              Retrieve HTML through a bounded HTTP path. Automatic sessions can
-              escalate when the page or your next command needs a browser.
+              Capture a page with a plain HTTP request when that is enough, and
+              a browser render only when the page needs one.
             </p><a href="/docs/providers/"
               >Understand acquisition <span aria-hidden="true">↗</span></a
             >
@@ -157,8 +159,8 @@ const repo = "https://github.com/elei-io/stolosio";
           </article>
           <article>
             <span class="feature-number">03</span><h3>Own the decisions.</h3><p>
-              Set fleet limits, inspect sessions, and control paid fallback.
-              Domain evidence helps guide future routes on your own
+              Set fleet limits, cost rates, and the domain blocklist, inspect
+              sessions, and decide when paid capacity is available on your own
               installation.
             </p><a href="/docs/operations/"
               >Explore fleet operations <span aria-hidden="true">↗</span></a

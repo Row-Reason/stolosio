@@ -6,4 +6,3 @@ class StolosioSessionSetting(BaseStolosioSetting[SessionSettingSchema]):
     slug = "session"
     query_prefix = "stolosio.session"
     schema = SessionSettingSchema
-    automatic = False

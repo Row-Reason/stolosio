@@ -324,27 +324,30 @@ async def test_cancelled_admission_releases_a_late_session():
 
 
 @pytest.mark.asyncio
-async def test_browser_requirement_acquires_before_accept_and_relays_natively(monkeypatch):
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("stolosio.session.admission_timeout_ms=20", ProviderName.BROWSERLESS),
+        (
+            "stolosio.provider.slug=browserless_cloud&stolosio.session.admission_timeout_ms=20",
+            ProviderName.BROWSERLESS_CLOUD,
+        ),
+    ],
+)
+async def test_provider_is_acquired_before_accept_and_relayed_natively(
+    monkeypatch, query, expected
+):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
 
-    from backend.proxy.routing import ProviderCandidate, ProviderPlan
-
     session, attempt = FakeSessionLease(), FakeAttemptLease()
     provider = SimpleNamespace(close=AsyncMock())
-    routing = SimpleNamespace(plan=AsyncMock(return_value=ProviderPlan(
-        (ProviderCandidate(ProviderName.BROWSERLESS, 100, 0),), "bootstrap", 1, 1,
-    )))
-    websocket = FakeWebSocket(
-        "stolosio.session.browser_required=true&stolosio.session.admission_timeout_ms=20"
-    )
-    gateway = Gateway(SimpleNamespace(admit=AsyncMock(return_value=session)), None,
-                      Settings(), routing=routing)
+    websocket = FakeWebSocket(query)
+    gateway = Gateway(SimpleNamespace(admit=AsyncMock(return_value=session)), None, Settings())
 
     async def prepare(lease, resolved):
         assert not websocket.accepted
-        assert resolved.provider.slug is ProviderName.BROWSERLESS
-        assert not resolved.provider.allow_paid_fallback
+        assert resolved.provider.slug is expected
         return attempt, provider
 
     async def relay(ws, upstream, observer):
@@ -358,38 +361,5 @@ async def test_browser_requirement_acquires_before_accept_and_relays_natively(mo
     await gateway.connect(websocket)
     assert websocket.accepted
     assert websocket.closed is None
-    routing.plan.assert_awaited_once_with(None, exclude=frozenset({ProviderName.HTTP}),
-                                         allow_paid_fallback=False)
     provider.close.assert_awaited_once()
     assert attempt.released == [(False, "client_disconnected")]
-
-
-@pytest.mark.asyncio
-async def test_required_browser_tries_planned_paid_fallback_after_local_failure(monkeypatch):
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
-
-    from backend.proxy.errors import ProviderQueueFull
-    from backend.proxy.routing import ProviderCandidate, ProviderPlan
-
-    _, resolved = await stolosio_settings_resolver.resolve([
-        ("stolosio.session.browser_required", "true"),
-        ("stolosio.provider.allow_paid_fallback", "true"),
-    ])
-    routing = SimpleNamespace(plan=AsyncMock(return_value=ProviderPlan((
-        ProviderCandidate(ProviderName.BROWSERLESS, 100, 0),
-        ProviderCandidate(ProviderName.BROWSERBASE, 300, 1),
-    ), "fallback", 1, 1)))
-    gateway = Gateway(None, None, Settings(), routing=routing)
-    providers = []
-
-    async def prepare(session, settings):
-        providers.append(settings.provider.slug)
-        if settings.provider.slug is ProviderName.BROWSERLESS:
-            raise ProviderQueueFull
-        return "attempt", "provider"
-
-    monkeypatch.setattr(gateway, "_prepare", prepare)
-    assert await gateway._prepare_browser(FakeSessionLease(), resolved) == ("attempt", "provider")
-    assert providers == [ProviderName.BROWSERLESS, ProviderName.BROWSERBASE]
-    assert routing.plan.call_args.kwargs["allow_paid_fallback"]

@@ -3,7 +3,6 @@ import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from urllib.parse import urlsplit
 from uuid import UUID
 
 from backend.events.contracts import SessionEvent
@@ -46,7 +45,6 @@ class _AttemptPhaseUsage:
     active_started_at: float | None = None
     active_command_count: int = 0
     command_active_seconds: float = 0
-    transition_replay_ms: int = 0
     provider_bootstrap_ms: int = 0
     provider_close_ms: int = 0
 
@@ -87,7 +85,6 @@ class _AttemptPhaseUsage:
                 if self.last_command_at is not None
                 else None
             ),
-            "transition_replay_ms": self.transition_replay_ms,
             "provider_bootstrap_ms": self.provider_bootstrap_ms,
             "provider_close_ms": self.provider_close_ms,
         }
@@ -95,7 +92,6 @@ class _AttemptPhaseUsage:
 
 _ATTEMPT_PHASE_NAMES = frozenset(
     {
-        "transition_replay_ms",
         "provider_bootstrap_ms",
         "provider_close_ms",
     }
@@ -157,24 +153,6 @@ class CdpEventObserver:
         if provider is not None and attempt_id is not None:
             self.start_attempt_phase(provider, attempt_id)
 
-    def bind_attempt(self, provider: ProviderName, attempt_id: UUID | None) -> None:
-        previous = self._attempt_key()
-        self._provider = provider
-        self._attempt_id = attempt_id
-        current = self._attempt_key()
-        if current is None:
-            return
-        observed_at = self._clock()
-        self._attempt_phases.setdefault(current, _AttemptPhaseUsage(observed_at))
-        if previous == current:
-            return
-        for pending_key, phase_key in list(self._pending_phase_keys.items()):
-            if phase_key != previous:
-                continue
-            self._finish_phase_command(phase_key, observed_at)
-            self._start_phase_command(current, observed_at)
-            self._pending_phase_keys[pending_key] = current
-
     def start_attempt_phase(self, provider: ProviderName, attempt_id: UUID) -> None:
         self._attempt_phases.setdefault(
             (provider, attempt_id),
@@ -231,20 +209,7 @@ class CdpEventObserver:
             url = sanitize_url(raw_url)
             domain = normalize_domain(raw_url)
             if url is not None:
-                parsed = urlsplit(raw_url)
-                await self._emit(
-                    EventType.NAVIGATION_REQUESTED,
-                    {
-                        "url": url,
-                        "probe_safe": (
-                            parsed.scheme in {"http", "https"}
-                            and parsed.hostname is not None
-                            and parsed.username is None
-                            and parsed.password is None
-                            and not parsed.query
-                        ),
-                    },
-                )
+                await self._emit(EventType.NAVIGATION_REQUESTED, {"url": url})
         self._command_sequence += 1
         self._pending[(session_id, command_id)] = _PendingCommand(
             self._command_sequence,
@@ -271,14 +236,6 @@ class CdpEventObserver:
             if phase_key is not None and key not in self._pending_phase_keys:
                 self._start_phase_command(phase_key, observed_at)
                 self._pending_phase_keys[key] = phase_key
-
-    async def command_unsupported(self, command_id: int) -> None:
-        await self._finish_command(
-            command_id,
-            EventType.COMMAND_FAILED,
-            reason="unsupported_command",
-            cdp_error_code=-32601,
-        )
 
     async def upstream_message(self, message: str) -> None:
         try:

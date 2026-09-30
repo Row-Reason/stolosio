@@ -38,9 +38,7 @@ type CostPageProps = {
 }
 
 const providerLabels: Record<ActivityProvider, string> = {
-  http: "HTTP",
   browserless: "Browserless",
-  browserbase: "Browserbase",
   browserless_cloud: "Browserless cloud",
 }
 
@@ -127,9 +125,7 @@ function CostHistory({ data }: { data: CostOverview }) {
     )
   )
   const colors: Record<ActivityProvider, string> = {
-    http: "bg-sky-500",
     browserless: "bg-emerald-500",
-    browserbase: "bg-violet-500",
     browserless_cloud: "bg-fuchsia-500",
   }
 
@@ -155,12 +151,7 @@ function CostHistory({ data }: { data: CostOverview }) {
                   }}
                 >
                   {(
-                    [
-                      "http",
-                      "browserless",
-                      "browserbase",
-                      "browserless_cloud",
-                    ] as ActivityProvider[]
+                    ["browserless", "browserless_cloud"] as ActivityProvider[]
                   ).map((provider) => {
                     const value = providers[provider] ?? 0
                     return value ? (
@@ -313,7 +304,7 @@ export function CostPage({ navigate }: CostPageProps) {
         </Card>
       ) : (
         <>
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Metric
               icon={Coins}
               label="Modeled cost"
@@ -330,19 +321,11 @@ export function CostPage({ navigate }: CostPageProps) {
             />
             <Metric
               icon={Clock3}
-              label="Browserbase billable"
-              value={formatMilliseconds(
-                data.totals.browserbase_billable_time_ms
-              )}
-              detail="Estimated billable time, including minimums"
-            />
-            <Metric
-              icon={Clock3}
               label="Browser-connected"
               value={formatMilliseconds(
                 data.totals.browser_connected_time_ms
               )}
-              detail="Measured connected time, excluding the HTTP path"
+              detail="Measured time connected to a browser"
             />
             <Metric
               icon={CircleAlert}

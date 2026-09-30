@@ -1,9 +1,7 @@
 # Fleet and Capacity Management
 
-Stolosio manages Browserless as a horizontal fleet. Browserbase is externally hosted, so
-Stolosio manages an admission quota rather than infrastructure. Direct HTTP work also
-uses an admission quota because it consumes Stolosio process and network capacity
-without browser instances.
+Stolosio manages Browserless as a horizontal fleet. Browserless cloud is externally
+hosted, so Stolosio manages an admission quota rather than infrastructure.
 
 ## Browserless
 
@@ -47,26 +45,20 @@ HPA must not target that StatefulSet. Deterministic StatefulSet ordinals let Sto
 drain the instance Kubernetes will remove before lowering replicas. See
 [Kubernetes and k3s](KUBERNETES.md).
 
-## Browserbase
+## Browserless cloud
 
-Browserbase supplies its own infrastructure. Stolosio stores a durable external-provider
-limit with enabled state, maximum active sessions, maximum queued attempts, and an
-audited configuration version.
+Browserless cloud supplies its own infrastructure. Stolosio stores a durable
+external-provider limit with enabled state, maximum active sessions, maximum queued
+attempts, and an audited configuration version, managed through
+`/v1/admin/providers/browserless_cloud/capacity`.
 
 Admission checks and consumes this capacity transactionally. The limit can match a
-Browserbase subscription or sit below it as a cost ceiling. Credentials and project ID
-remain deployment secrets. Startup inserts a disabled product default only when no
-Browserbase limit row exists and never derives enablement or limits from environment
-variables. An operator cannot enable Browserbase without an API key; the
-administrative API returns a clear conflict instead of accepting an unusable provider
-configuration.
-
-## Direct HTTP
-
-Stolosio stores durable maximum-active and maximum-queued limits for direct HTTP work.
-Administrators configure both values, and can enable or disable HTTP admission, from
-the Fleets page. Admission applies changes to new acquisition attempts immediately;
-active requests are allowed to finish.
+Browserless subscription or sit below it as a cost ceiling. The token remains a
+deployment secret (`BROWSERLESS_CLOUD_TOKEN`). Startup inserts a disabled product
+default only when no limit row exists and never derives enablement or limits from
+environment variables. An operator cannot enable Browserless cloud without a token;
+the administrative API returns a clear conflict instead of accepting an unusable
+provider configuration.
 
 ## Administrative boundary
 
@@ -74,7 +66,7 @@ Fleet and external quota limits are administrative policy, not `stolosio.*` sess
 settings. Explicit downstream provider selection cannot bypass them.
 
 PostgreSQL is authoritative for queues, leases, slot assignments, desired capacity,
-external quotas, routing policy, and configuration audit. API startup may create
+external quotas, cost rates, network policy, and configuration audit. API startup may create
 missing policy rows with product defaults, but a restart or redeploy never overwrites
 operator-saved values. Environment variables are reserved for credentials, endpoints,
 database and messaging connections, and process/runtime mechanics. Prometheus exposes

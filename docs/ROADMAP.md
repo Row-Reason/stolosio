@@ -13,11 +13,9 @@ client.
 - [Managed Browserless fleet](FLEET_MANAGEMENT.md): runtime-neutral reconciliation,
   multi-session instances, Docker Compose runtime support, packing, scale-up, and idle
   scale-down.
-- [Bounded HTTP execution](NO_BROWSER.md): serve navigation and content without a
-  browser, then escalate once to a native CDP provider when another operation is
-  observed.
-- [Domain routing](ARCHITECTURE.md): use current health evidence and cost to order
-  Browserless and retain Browserbase as the capacity-controlled terminal fallback.
+- [Page capture](CAPTURE.md): return a page's content through plain HTTP when it
+  proves enough, a render on the managed fleet otherwise, and optional paid challenge
+  resolution on Browserless cloud.
 
 ## Next
 

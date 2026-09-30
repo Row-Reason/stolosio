@@ -48,8 +48,6 @@ const admissionProviderLabels: Record<
   ExternalProviderCapacity["provider"],
   string
 > = {
-  http: "Direct HTTP",
-  browserbase: "Browserbase",
   browserless_cloud: "Browserless cloud",
 }
 
@@ -984,9 +982,7 @@ function ExternalCapacityForm({
         </div>
         <div className="mt-6 flex items-center justify-between border-t pt-5">
           <p className="text-xs text-muted-foreground">
-            {capacity.provider !== "http"
-              ? `Stolosio controls admission only; ${admissionProviderLabels[capacity.provider]} controls instances.`
-              : "Stolosio enforces this limit before starting direct HTTP work."}
+            {`Stolosio controls admission only; ${admissionProviderLabels[capacity.provider]} controls instances.`}
           </p>
           <Button
             type="submit"
@@ -1047,9 +1043,8 @@ function ExternalCapacityDetail({
           {admissionProviderLabels[capacity.provider]}
         </h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          {capacity.provider !== "http"
-            ? "External browser concurrency and Stolosio admission limits. There are no Stolosio-managed instances for this provider."
-            : "Direct HTTP concurrency and queue limits enforced by Stolosio admission."}
+          External browser concurrency and Stolosio admission limits. There are
+          no Stolosio-managed instances for this provider.
         </p>
       </header>
       <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1074,11 +1069,7 @@ function ExternalCapacityDetail({
         <MetricCard
           label="Configured limit"
           value={capacity.max_active_sessions}
-          detail={
-            capacity.provider !== "http"
-              ? "Subscription or cost ceiling"
-              : "Direct request ceiling"
-          }
+          detail="Subscription or cost ceiling"
           icon={Settings2}
         />
       </section>

@@ -42,11 +42,10 @@ async def test_session_queries_return_summaries_and_redacted_detail(
             id="00000000-0000-0000-0000-000000000003",
             session_id=session.id,
             ordinal=1,
-            provider="http",
+            provider="browserless",
             resolved_settings={"proxy": "secret"},
-            setting_sources={"provider": "automatic"},
+            setting_sources={"provider": "default"},
             state="closed",
-            selection_reason="cheapest_eligible",
             modeled_cost_units=2,
             phase_summary={
                 "measurement_version": 1,
@@ -70,10 +69,10 @@ async def test_session_queries_return_summaries_and_redacted_detail(
         )
 
     service = SessionQueryService(database_sessions)
-    page = await service.sessions(SessionFilters(provider="http"))
+    page = await service.sessions(SessionFilters(provider="browserless"))
     detail = await service.session(session.id)
 
-    assert page.sessions[0]["providers"] == ["http"]
+    assert page.sessions[0]["providers"] == ["browserless"]
     assert page.sessions[0]["domains"] == [{"id": domain.id, "hostname": "example.test"}]
     assert page.sessions[0]["duration_seconds"] == 10
     assert detail is not None

@@ -46,7 +46,6 @@ export type CostTotals = {
   chargeable_time_ms: number
   browser_connected_time_ms: number
   browserless_slot_time_ms: number
-  browserbase_billable_time_ms: number
 }
 
 export type ProviderCostSummary = {
@@ -58,7 +57,6 @@ export type ProviderCostSummary = {
   chargeable_time_ms: number
   browser_connected_time_ms: number
   capacity_occupied_time_ms: number
-  estimated_billable_time_ms: number
 }
 
 export type CostBucket = {
@@ -89,11 +87,7 @@ export type CostOverview = {
   recent_sessions: CostSession[]
 }
 
-export type ActivityProvider =
-  | "http"
-  | "browserless"
-  | "browserbase"
-  | "browserless_cloud"
+export type ActivityProvider = "browserless" | "browserless_cloud"
 
 export type StolosioSessionState =
   | "requested"
@@ -117,13 +111,9 @@ export type SessionListItem = {
   duration_seconds: number | null
   terminal_reason: string | null
   providers: ActivityProvider[]
-  selection_mode: "automatic" | "explicit"
-  selection_reason: string | null
-  transition_triggers: string[]
   modeled_cost_units: number
   total_browser_time_ms: number
   total_capacity_occupied_ms: number
-  estimated_billable_ms: number
   domains: SessionDomainSummary[]
 }
 
@@ -139,7 +129,6 @@ export type AttemptPhaseSummary = {
   no_command_in_flight_ms: number
   pre_first_command_ms: number | null
   post_last_command_ms: number | null
-  transition_replay_ms: number
   provider_bootstrap_ms: number
   provider_close_ms: number
 }
@@ -151,11 +140,6 @@ export type SessionAttempt = {
   provider_instance_id: string | null
   provider_session_id: string | null
   state: string
-  selection_reason: string | null
-  transition_trigger: string | null
-  plan_version: number | null
-  plan_position: number | null
-  estimated_cost_units: number | null
   modeled_cost_units: number | null
   chargeable_time_ms: number | null
   cost_basis: string | null
@@ -172,7 +156,6 @@ export type SessionAttempt = {
   capacity_occupied_ms: number | null
   browser_connected_ms: number | null
   provider_reported_ms: number | null
-  estimated_billable_ms: number | null
   phase_summary: AttemptPhaseSummary | null
   terminal_reason: string | null
 }
@@ -232,7 +215,7 @@ export type FleetConfigurationUpdate = {
 }
 
 export type ExternalProviderCapacity = {
-  provider: "http" | "browserbase" | "browserless_cloud"
+  provider: "browserless_cloud"
   enabled: boolean
   max_active_sessions: number
   max_queued_attempts: number
@@ -245,20 +228,6 @@ export type ExternalProviderCapacityUpdate = {
   max_queued_attempts?: number
 }
 
-export type RoutingConfiguration = {
-  default_provider: ActivityProvider
-  existing_domain_probe_rate_basis_points: number
-  required_health_confirmations: number
-  health_policy_version: number
-  configuration_version: number
-}
-
-export type RoutingConfigurationUpdate = {
-  default_provider?: ActivityProvider
-  existing_domain_probe_rate_basis_points?: number
-  required_health_confirmations?: number
-}
-
 export type NetworkPolicy = {
   blocked_domain_patterns: string[]
   configuration_version: number
@@ -268,179 +237,8 @@ export type NetworkPolicyUpdate = {
   blocked_domain_patterns: string[]
 }
 
-export type ProviderRoutingProfile = {
+export type ProviderCostRate = {
   provider: ActivityProvider
-  automatic_enabled: boolean
   cost_units_per_second: number
-  provider_contract_version: number
-}
-
-export type ProviderRoutingUpdate = {
-  automatic_enabled?: boolean
-  cost_units_per_second?: number
-}
-
-export type DomainHealthState =
-  "unknown" | "healthy" | "unhealthy" | "inconclusive"
-
-export type DomainPlanCandidate = {
-  provider: ActivityProvider
-  estimated_cost_units: number
-}
-
-export type DomainPlan = {
-  reason:
-    | "cheapest_eligible"
-    | "adaptive_browser_required"
-    | "adaptive_http_exploration"
-    | "configured_default_bootstrap"
-    | "local_correctness_fallback"
-    | "no_eligible_provider"
-  candidates: DomainPlanCandidate[]
-  paid_fallback_available: boolean
-}
-
-export type DomainSummary = {
-  known_domains: number
-  healthy_domains: number
-  checking_domains: number
-  unhealthy_domains: number
-  no_evidence_domains: number
-  transitioned_domains: number
-}
-
-export type DomainListItem = {
-  id: number
-  hostname: string
-  first_seen_at: string
-  last_seen_at: string
-  session_count: number
-  eligible_acquisition_count: number
-  transition_count: number
-  active_probe_count: number
-  health_counts: {
-    unknown: number
-    checking: number
-    healthy: number
-    unhealthy: number
-    inconclusive: number
-  }
-  expected_plan: DomainPlan
-}
-
-export type DomainPage = {
-  domains: DomainListItem[]
-  summary: DomainSummary
-  next_cursor: string | null
-}
-
-export type DomainProviderEvidence = {
-  provider: ActivityProvider
-  automatic_enabled: boolean
-  health_state: DomainHealthState
-  routing_eligible: boolean
-  paid_fallback_available: boolean
-  successful_probe_count: number
-  failed_probe_count: number
-  inconclusive_probe_count: number
-  observed_attempt_count: number
-  total_cost_units: number
-  average_cost_units: number
-  cost_is_estimate: boolean
-  last_status_code: number | null
-  last_checked_at: string | null
-  last_healthy_at: string | null
-  failure_reason_code: string | null
-  health_policy_version: number | null
-  provider_contract_version: number
-  checks: {
-    navigation: DomainHealthCheck
-    status: DomainHealthCheck
-    headers: DomainHealthCheck
-    content: DomainHealthCheck
-  }
-}
-
-export type DomainCheckState =
-  "healthy" | "unhealthy" | "inconclusive" | "checking" | "not_checked"
-
-export type DomainHealthCheck = {
-  state: DomainCheckState
-  checked_at: string | null
-}
-
-export type DomainDetail = {
-  id: number
-  hostname: string
-  first_seen_at: string
-  last_seen_at: string
-  session_count: number
-  eligible_acquisition_count: number
-  active_probe_count: number
-  transition_count: number
-  routing_preference: {
-    preferred_provider: "http" | "browserless"
-    preference_score: number
-    browser_required_count: number
-    http_sufficient_count: number
-    browser_compatible_count: number
-    last_evidence_at: string
-  } | null
-  expected_plan: DomainPlan
-  providers: DomainProviderEvidence[]
-}
-
-export type DomainProbe = {
-  id: string
-  cohort_id: string
-  source_session_id: string
-  candidate_provider: ActivityProvider
-  trigger: "new_domain" | "existing_sample" | "manual"
-  state: "queued" | "running" | "completed" | "failed"
-  outcome: "healthy" | "unhealthy" | "inconclusive" | null
-  navigation_state: string | null
-  status_state: string | null
-  headers_state: string | null
-  content_state: string | null
-  status_code: number | null
-  reason_codes: string[]
-  content_facts: Record<string, number | boolean>
-  comparison_state:
-    | "pending"
-    | "not_applicable"
-    | "inconclusive"
-    | "comparable"
-    | "materially_incomplete"
-  cost_units: number | null
-  created_at: string
-  finished_at: string | null
-}
-
-export type DomainProbePage = {
-  probes: DomainProbe[]
-  next_cursor: string | null
-}
-
-export type TriggerDomainProbesResponse = {
-  scheduled: { id: string; provider: ActivityProvider }[]
-  already_active: { id: string; provider: ActivityProvider }[]
-}
-
-export type DomainSession = {
-  id: string
-  client_reference: string | null
-  state: string
-  selection_mode: "automatic" | "explicit"
-  providers: ActivityProvider[]
-  selection_reason: string | null
-  transition_triggers: string[]
-  modeled_cost_units: number
-  created_at: string
-  closed_at: string | null
-  terminal_reason: string | null
-}
-
-export type DomainSessionPage = {
-  sessions: DomainSession[]
-  next_cursor: string | null
+  updated_at: string
 }

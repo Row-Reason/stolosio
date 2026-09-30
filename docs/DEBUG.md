@@ -9,12 +9,12 @@ downstream integration partner through a small, read-only WebSocket.
 ## Purpose
 
 The stream preserves useful evidence from a session regardless of whether the work was
-performed by plain HTTP, Browserless, or Browserbase.
+performed by the local Browserless fleet or Browserless cloud.
 
 This evidence should help Stolosio's operators, and potentially downstream consumers,
 investigate questions such as:
 
-- Whether the selected provider behaved well for the session.
+- Whether the named provider behaved well for the session.
 - Whether the observed responses indicate that a different level of browser stealth
   may be worth trying.
 - Whether the observed network behavior makes IP rotation worth considering.
@@ -73,7 +73,6 @@ Potential evidence includes:
 - Page or browser crashes.
 - Provider connections closing.
 - Cookie changes where the provider exposes them.
-- Equivalent HTTP response observations for no-browser sessions.
 
 This list identifies evidence worth evaluating. It does not define the stream's schema
 or promise that every provider can supply every observation.
@@ -81,7 +80,7 @@ or promise that every provider can supply every observation.
 ## Standardization
 
 Stolosio should normalize equivalent evidence so consumers do not need to understand
-provider conventions or the HTTP no-browser path.
+provider conventions.
 
 The useful common subset must be discovered from the evidence each provider actually
 supplies. Provider-specific evidence may be retained when it is useful, but it must be
@@ -110,8 +109,8 @@ and `javascript.exception` with bounded source, level, and message fingerprint. 
 and unrestricted console text never enter the stream. Attempt closure includes
 normalized Stolosio cost units.
 
-Whether a provider supports a domain and how providers are ordered are policy
-conclusions stored outside DEBUG.
+Stolosio does not draw conclusions about which provider suits a domain from these
+events.
 
 ## Downstream WebSocket
 
@@ -185,6 +184,3 @@ backpressure browser execution, and the UI deduplicates events by `event_id`.
 These routes are an operator contract, not a replacement for the downstream
 single-session DEBUG WebSocket. Until administrative authentication exists, they must
 remain on a trusted network.
-
-Deterministic interpretation of these observations is described in
-[Domain Routing](ANALYTICS.md).

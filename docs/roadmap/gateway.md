@@ -10,7 +10,7 @@ Stolosio exposes one provider-neutral CDP WebSocket:
 WS /v1/connect
 ```
 
-The provider is automatic unless the caller explicitly supplies
+The provider is the local `browserless` fleet unless the caller explicitly supplies
 `stolosio.provider.slug`. Ordinary CDP consumers are not required to understand Stolosio's
 capacity, queues, deadlines, or rejection reasons.
 
@@ -25,9 +25,6 @@ connection
 global Stolosio admission
     |
     v
-planner
-    |
-    v
 provider attempt admission
     |
     v
@@ -37,12 +34,12 @@ provider connection
 Global admission limits all live Stolosio sessions. A session keeps its global slot from
 admission until the downstream connection terminates.
 
-Provider admission independently limits active and queued attempts for HTTP,
-Browserless, and Browserbase. A full provider queue fails only that attempt;
-the gateway then terminates and releases the logical session cleanly.
+Provider admission independently limits active and queued attempts for Browserless
+and Browserless cloud. A full provider queue fails only that attempt; the gateway then
+terminates and releases the logical session cleanly.
 
-This separation allows a future session to perform an HTTP attempt and later acquire a
-browser without changing identity or moving the session itself between queues.
+This separation also lets a page capture trade its local attempt for a Browserless
+cloud attempt without changing session identity.
 
 ## Lifecycles
 
@@ -84,6 +81,5 @@ own the resolved provider settings, FIFO position, provider resource, and outcom
 ## Subsequent milestones
 
 This milestone established the logical-session and acquisition-attempt boundary.
-Domain support planning, adaptive HTTP execution, and runtime provider transition were
-implemented by later milestones without changing that boundary. Registered CDP
+Page capture was later built on the same boundary. Registered CDP
 discovery and target-management HTTP routes remain explicit placeholders.

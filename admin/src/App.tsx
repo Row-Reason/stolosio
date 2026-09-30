@@ -5,10 +5,9 @@ import {
   CircleDot,
   Coins,
   Gauge,
-  Globe2,
   Menu,
   Moon,
-  Network,
+  ShieldCheck,
   Sun,
   X,
 } from "lucide-react"
@@ -17,10 +16,9 @@ import { type ComponentType, useEffect, useState } from "react"
 import { useTheme } from "@/components/theme-provider"
 import { ActivityPage } from "@/components/activity-page"
 import { CostPage } from "@/components/cost-page"
-import { DomainsPage } from "@/components/domains-page"
 import { FleetsPage } from "@/components/fleets-page"
 import { OverviewPage } from "@/components/overview-page"
-import { RoutingPage } from "@/components/routing-page"
+import { PolicyPage } from "@/components/policy-page"
 import { SessionsPage } from "@/components/sessions-page"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -64,16 +62,10 @@ const navigationItems: NavigationItem[] = [
     description: "Provider capacity, instances, queues, and scaling policy.",
   },
   {
-    label: "Routing",
-    href: "/routing",
-    icon: Network,
-    description: "Automatic provider selection, costs, and routing policy.",
-  },
-  {
-    label: "Domains",
-    href: "/domains",
-    icon: Globe2,
-    description: "Per-domain provider support and runtime transition evidence.",
+    label: "Policy",
+    href: "/policy",
+    icon: ShieldCheck,
+    description: "Global request blocking and provider cost rates.",
   },
 ]
 
@@ -137,9 +129,6 @@ export default function App() {
     ) ?? navigationItems[1]
   const fleetProvider = pathname.startsWith("/fleets/")
     ? pathname.slice("/fleets/".length)
-    : undefined
-  const domainId = pathname.startsWith("/domains/")
-    ? Number(pathname.slice("/domains/".length))
     : undefined
   const sessionId = pathname.startsWith("/sessions/")
     ? pathname.slice("/sessions/".length)
@@ -256,17 +245,12 @@ export default function App() {
           <ActivityPage navigate={navigate} />
         ) : activeItem.href === "/fleets" ? (
           <FleetsPage provider={fleetProvider} navigate={navigate} />
-        ) : activeItem.href === "/routing" ? (
-          <RoutingPage />
+        ) : activeItem.href === "/policy" ? (
+          <PolicyPage />
         ) : activeItem.href === "/sessions" ? (
           <SessionsPage sessionId={sessionId} navigate={navigate} />
         ) : activeItem.href === "/cost" ? (
           <CostPage navigate={navigate} />
-        ) : activeItem.href === "/domains" ? (
-          <DomainsPage
-            domainId={Number.isInteger(domainId) ? domainId : undefined}
-            navigate={navigate}
-          />
         ) : (
           <StubPage item={activeItem} />
         )}

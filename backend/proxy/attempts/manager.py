@@ -158,9 +158,6 @@ class AttemptAdmission:
                 provider,
                 resolved_settings={
                     "stolosio.provider.slug": provider.value,
-                    "stolosio.provider.allow_paid_fallback": (
-                        resolved.provider.allow_paid_fallback
-                    ),
                     "policy.network.blocked_domain_patterns": list(
                         resolved.blocked_domain_patterns
                     ),

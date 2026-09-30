@@ -7,7 +7,6 @@ from backend.metrics.definitions import (
     COMMANDS,
     EVENT_PUBLICATION_FAILURES,
     PROVIDER_FAILURES,
-    PROVIDER_TRANSITIONS,
     SESSION_ACQUISITION_DURATION,
     SESSION_ACQUISITIONS,
     SESSIONS_COMPLETED,
@@ -49,16 +48,6 @@ def metric_reason(reason: object) -> str:
     return reason if isinstance(reason, str) and reason in _KNOWN_REASONS else "other"
 
 
-def transition_trigger(trigger: object) -> str:
-    if trigger == "replay_budget":
-        return "replay_budget"
-    if trigger in {"http_transport_failure", "http_response_too_large"}:
-        return "http_safety"
-    if isinstance(trigger, str) and "." in trigger:
-        return "new_requirement"
-    return "other"
-
-
 def observe_command(
     provider: ProviderName,
     method: str,
@@ -77,13 +66,6 @@ def observe_published_event(event: SessionEvent) -> None:
     if event_type in {EventType.SESSION_CLOSED, EventType.SESSION_FAILED}:
         outcome = "closed" if event_type is EventType.SESSION_CLOSED else "failed"
         SESSIONS_COMPLETED.labels(outcome).inc()
-        return
-    if event_type is EventType.EXECUTION_TRANSITIONED:
-        PROVIDER_TRANSITIONS.labels(
-            event.payload["from_provider"],
-            event.payload["to_provider"],
-            transition_trigger(event.payload.get("trigger_method")),
-        ).inc()
         return
     if event.provider is None:
         return
