@@ -156,7 +156,7 @@ request; **503** only when the service can't accept requests at all (same body s
       }
     ],
     "cost": {"browser_seconds": 23.6, "paid": false, "bytes": 2874983},
-    "versions": {"pagecapture": "0.1.0", "classifier": "rules", "renderer": "adaptive-4"}
+    "versions": {"pagecapture": "0.1.0", "classifier": "rules", "renderer": "adaptive-5"}
   }
 }
 ```
