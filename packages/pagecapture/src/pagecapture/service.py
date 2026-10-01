@@ -396,7 +396,11 @@ class CaptureService:
             if http_usable:
                 return self._keep_http(result, http_doc, "no browser capacity" if busy else "browser unavailable")
             result.document = http_doc
-            result.failure = failures.failure("capacity" if busy else "browser_unavailable", repr(e)[:300])
+            result.failure = failures.failure(
+                "capacity" if busy else "browser_unavailable",
+                repr(e)[:300],
+                getattr(e, "retry_after_seconds", None) if busy else None,
+            )
             return self._finish(result)
         cost = result.evidence.cost
         cost.browser_seconds += rendered.seconds

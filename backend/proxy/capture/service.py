@@ -237,7 +237,10 @@ class CaptureRunner:
                         replacement_for=capture.slot.attempt.attempt_id,
                     )
             except (ProviderQueueFull, ProviderQueueTimeout, TimeoutError) as error:
-                raise BrowserCapacity(f"no Browserless cloud capacity: {error!r}") from error
+                raise BrowserCapacity(
+                    f"no Browserless cloud capacity: {error!r}",
+                    retry_after_seconds=RETRY_AFTER_SECONDS,
+                ) from error
             # The local slot is done: nothing renders locally after challenge resolution.
             await self._bounded(
                 capture.slot.release(failed=False, reason="challenge_resolution"),

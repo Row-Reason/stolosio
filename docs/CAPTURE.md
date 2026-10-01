@@ -48,7 +48,13 @@ enabled the `browserless_cloud` provider (`PATCH /v1/admin/providers/browserless
 it needs `BROWSERLESS_CLOUD_TOKEN`). The capture then trades its local slot for a
 `browserless_cloud` attempt, counted against that provider's concurrency limit, and Browserless
 BrowserQL unblocks the page through a residential proxy (`BROWSERLESS_CLOUD_PROXY_COUNTRY`, default
-`jp`). No cloud capacity fails the capture as `capacity` (transient).
+`jp`). No cloud capacity fails the capture as `capacity` (transient): Stolosio's own limit
+(`retry_after_seconds` 5), or Browserless refusing for the plan's limits — HTTP 429 or a BrowserQL
+error naming a concurrency or rate limit (Retry-After, else 30 s), HTTP 402 or an error naming a
+quota, units or billing (Retry-After, else 3600 s). Any other BrowserQL HTTP error, unreadable
+response or connection failure is an outage: `browser_unavailable`. Every BrowserQL failure logs a
+warning with its HTTP status, duration and a single-line summary of at most 200 characters with the
+token and URL queries redacted; failure messages carry the same summary.
 
 ## State and accounting
 

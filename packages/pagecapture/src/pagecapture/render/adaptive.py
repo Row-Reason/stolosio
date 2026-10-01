@@ -101,7 +101,11 @@ TICK_S = 0.1
 
 
 class BrowserCapacity(Exception):
-    """The browser fleet kept answering "busy" (503/429)."""
+    """The browser fleet kept answering "busy" (503/429), or a provider refused for its plan's limits."""
+
+    def __init__(self, message: str, retry_after_seconds: float | None = None):
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
 
 
 class PageBusy(Exception):

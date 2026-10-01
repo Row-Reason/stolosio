@@ -8,6 +8,8 @@ endpoint (e.g. browserless) for browsers.
 import asyncio
 import email.utils
 import ipaddress
+import logging
+import re
 import socket
 import time
 from dataclasses import dataclass, field, replace
@@ -20,7 +22,9 @@ import requests
 from .api import Exclusion, Redirect, accepts, excluded
 from .config import Settings
 from .fetch import make_response
-from .render import Rendered, Renderer
+from .render import BrowserCapacity, Rendered, Renderer
+
+log = logging.getLogger(__name__)
 
 ACCEPT_HEADER = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 
@@ -55,16 +59,20 @@ class HttpResponse:
         return make_response(self.status_code, self.final_url, dict(self.headers), self.body, history)
 
     def retry_after_seconds(self) -> float | None:
-        value = self.header("retry-after")
-        if not value:
-            return None
-        if value.strip().isdigit():
-            return float(value.strip())
-        try:
-            when = email.utils.parsedate_to_datetime(value)
-            return max(0.0, when.timestamp() - time.time())
-        except (TypeError, ValueError):
-            return None
+        return parse_retry_after(self.header("retry-after"))
+
+
+def parse_retry_after(value: str | None) -> float | None:
+    """Seconds from a Retry-After header (delta-seconds or an HTTP date); None when absent or unreadable."""
+    if not value:
+        return None
+    if value.strip().isdigit():
+        return float(value.strip())
+    try:
+        when = email.utils.parsedate_to_datetime(value)
+        return max(0.0, when.timestamp() - time.time())
+    except (TypeError, ValueError):
+        return None
 
 
 class ChallengeNotPassed(Exception):
@@ -308,6 +316,46 @@ class CdpBrowserTier:
             self._started = False
 
 
+SUMMARY_CHARS = 200
+URL_QUERY = re.compile(r"(\w+://[^\s?#\"'<>]+)\?[^\s#\"'<>]*")
+TOKEN_PARAM = re.compile(r"((?:^|[?&\s])token=)[^&\s\"']+", re.IGNORECASE)
+# A provider refusing work for the account's limits rather than failing: (kind, pattern over the error text).
+REFUSALS = (
+    (
+        "quota",
+        re.compile(
+            r"quota|out of units|no units|insufficient (?:units|credits|balance)|payment required|"
+            r"billing|usage limit|plan limit|subscription",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "concurrency",
+        re.compile(
+            r"too many (?:requests|sessions|concurrent)|rate.?limit|concurren|queue (?:is )?full|"
+            r"max(?:imum)? (?:\w+ )?(?:sessions|browsers)|over capacity|at capacity",
+            re.IGNORECASE,
+        ),
+    ),
+)
+REFUSAL_STATUS = {429: "concurrency", 402: "quota"}
+# Without a Retry-After: a concurrency slot frees within seconds; an exhausted quota needs an operator.
+REFUSAL_RETRY_AFTER_S = {"concurrency": 30.0, "quota": 3600.0}
+
+
+def bql_refusal(status: int, summary: str) -> str | None:
+    """The refusal kind, "concurrency" or "quota", when Browserless refused for the account's limits (429, 402, or
+    an error naming a concurrency, rate or quota limit); None for anything else, which is an outage or a fault."""
+    if status in REFUSAL_STATUS:
+        return REFUSAL_STATUS[status]
+    return next((kind for kind, pattern in REFUSALS if pattern.search(summary)), None)
+
+
+def _refusal_retry_after(kind: str, header: str | None) -> float:
+    retry_after = parse_retry_after(header)
+    return REFUSAL_RETRY_AFTER_S[kind] if retry_after is None else retry_after
+
+
 UNBLOCK = """mutation Unblock($url: String!, $navigationTimeout: Float, $solveTimeout: Float) {
   reject(type: [%s]) { enabled }
   goto(url: $url, waitUntil: domContentLoaded, timeout: $navigationTimeout) { status }
@@ -354,16 +402,56 @@ class BqlBrowserTier:
             "navigationTimeout": self.s.navigation_timeout_s * 1000,
             "solveTimeout": self.s.challenge_resolution_wait_s * 1000,
         }
-        r = await self._http.post(self.bql_url, json={"query": self._query, "variables": variables}, timeout=timeout_s)
+        t0 = time.perf_counter()
+        try:
+            r = await self._http.post(
+                self.bql_url, json={"query": self._query, "variables": variables}, timeout=timeout_s
+            )
+        except httpx.HTTPError as e:  # the message may carry the request URL, and with it the token
+            summary = self._redact(f"{type(e).__name__}: {e}")
+            log.warning("BrowserQL request failed after %.0f ms: %s", (time.perf_counter() - t0) * 1000, summary)
+            raise RuntimeError(f"BrowserQL request failed: {summary}") from None
+        ms = (time.perf_counter() - t0) * 1000
         if r.status_code != 200:
-            raise RuntimeError(f"BrowserQL HTTP {r.status_code}: {r.text[:200]}")
-        body = r.json()
+            summary = self._redact(r.text)
+            refusal = bql_refusal(r.status_code, summary)
+            log.warning(
+                "BrowserQL HTTP %s after %.0f ms (%s): %s", r.status_code, ms, refusal or "unavailable", summary
+            )
+            if refusal:
+                raise BrowserCapacity(
+                    f"Browserless refused ({refusal}): HTTP {r.status_code}: {summary}",
+                    retry_after_seconds=_refusal_retry_after(refusal, r.headers.get("retry-after")),
+                )
+            raise RuntimeError(f"BrowserQL HTTP {r.status_code}: {summary}")
+        try:
+            body = r.json()
+        except ValueError:
+            summary = self._redact(r.text)
+            log.warning("BrowserQL HTTP 200 after %.0f ms with an unreadable body: %s", ms, summary)
+            raise RuntimeError(f"BrowserQL: unreadable response: {summary}") from None
         if body.get("errors"):
-            message = f"BrowserQL: {body['errors'][0].get('message', body['errors'][0])}"[:300]
+            error = body["errors"][0]
+            summary = self._redact(str(error.get("message", error) if isinstance(error, dict) else error))
+            message = f"BrowserQL: {summary}"
             if "captcha solving timed out" in message.lower():
                 raise ChallengeNotPassed(message)
+            refusal = bql_refusal(200, summary)
+            log.warning("BrowserQL error after %.0f ms (%s): %s", ms, refusal or "unavailable", summary)
+            if refusal:
+                raise BrowserCapacity(
+                    f"Browserless refused ({refusal}): {summary}",
+                    retry_after_seconds=_refusal_retry_after(refusal, r.headers.get("retry-after")),
+                )
             raise RuntimeError(message)
         return body["data"]
+
+    def _redact(self, text: str) -> str:
+        """A bounded, single-line summary without the token, any token parameter or any URL's query."""
+        if self._token:
+            text = text.replace(self._token, "[redacted]")
+        text = URL_QUERY.sub(r"\1?[redacted]", TOKEN_PARAM.sub(r"\1[redacted]", text))
+        return " ".join(text.split())[:SUMMARY_CHARS]
 
     async def render(self, url: str, deadline_s: float, exclusions: tuple[Exclusion, ...] = ()) -> Rendered:
         """BrowserQL navigates on Browserless's side, so exclusions apply from the handover on (and to the page it

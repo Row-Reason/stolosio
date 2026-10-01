@@ -179,7 +179,7 @@ request; **503** only when the service can't accept requests at all (same body s
   "category": "website",            // "website" | "network" | "gateway" | "content"
   "transient": true,
   "message": "HTTP 429",
-  "retry_after_seconds": 120,       // from Retry-After when sent (transient failures only), else null
+  "retry_after_seconds": 120,       // from Retry-After when sent (transient failures only; a refusing browser provider's default for capacity), else null
   "resolution_attempted": null      // for bot_challenge / bot_blocked: was challenge resolution tried?
 }
 ```
@@ -200,8 +200,8 @@ request; **503** only when the service can't accept requests at all (same body s
 | `redirect_loop` | website | no | the redirects don't end: a loop, or more than 10 hops |
 | `unreachable` | network | yes | no HTTP response: connection, TLS, timeout, a DNS failure not confirmed as a missing host |
 | `host_not_found` | network | no | the host (the URL's or a redirect's) doesn't exist: a resolver confirmed it has no such name (NXDOMAIN) or no address |
-| `capacity` | gateway | yes | no browser capacity right now |
-| `browser_unavailable` | gateway | yes | a browser was needed but couldn't be used |
+| `capacity` | gateway | yes | no browser capacity right now, including a provider refusing for its plan's limits (BrowserQL 429/402 or a concurrency/rate/quota error; `retry_after_seconds` from Retry-After, else 30 s for concurrency and 3600 s for quota) |
+| `browser_unavailable` | gateway | yes | a browser was needed but couldn't be used (a provider outage or fault) |
 | `deadline_exceeded` | gateway | yes | the capture couldn't finish within the deadline |
 | `incomplete_content` | content | yes | even after rendering the content isn't trustworthy (or the body is empty) |
 | `interstitial` | content | yes | consent wall, queue or picker that couldn't be passed |

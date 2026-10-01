@@ -340,6 +340,26 @@ def test_a_busy_fleet_is_a_transient_capacity_failure():
     assert (r.failure.code, r.failure.category, r.failure.transient) == ("capacity", "gateway", True)
 
 
+def test_a_refusing_challenge_provider_is_capacity_with_its_retry_after():
+    from pagecapture.render import BrowserCapacity
+
+    fetcher = FakeFetcher(
+        status=403, body=CHALLENGE, headers=[("Content-Type", "text/html"), ("cf-mitigated", "challenge")]
+    )
+    tier = RaisingTier(BrowserCapacity("Browserless refused (concurrency): HTTP 429", retry_after_seconds=30.0))
+    r = run(service(fetcher, challenge=tier), resolve_bot_challenges=True)
+    assert (r.failure.code, r.failure.transient, r.failure.retry_after_seconds) == ("capacity", True, 30.0)
+
+
+def test_a_challenge_provider_outage_stays_browser_unavailable():
+    fetcher = FakeFetcher(
+        status=403, body=CHALLENGE, headers=[("Content-Type", "text/html"), ("cf-mitigated", "challenge")]
+    )
+    tier = RaisingTier(RuntimeError("BrowserQL HTTP 502: Bad Gateway"))
+    r = run(service(fetcher, challenge=tier), resolve_bot_challenges=True)
+    assert (r.failure.code, r.failure.retry_after_seconds) == ("browser_unavailable", None)
+
+
 def test_browser_refused_with_an_error_status_keeps_the_usable_plain_response():
     refused = FakeTier(
         "managed",
