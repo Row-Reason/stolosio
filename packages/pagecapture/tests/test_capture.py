@@ -11,7 +11,9 @@ from pagecapture import (
     ExcludedUrl,
     Exclusion,
     FetchError,
+    HostNotFound,
     HttpResponse,
+    RedirectLoop,
     Settings,
     UnsupportedMediaType,
 )
@@ -42,6 +44,8 @@ class FakeFetcher:
         self.headers = headers or [("Content-Type", "text/html; charset=utf-8")]
 
     async def fetch(self, url, timeout_s, exclusions=(), accept=None):
+        if isinstance(self.error, Exception):
+            raise self.error
         if self.error:
             raise FetchError(self.error)
         body = self.body.encode() if isinstance(self.body, str) else self.body
@@ -220,9 +224,36 @@ def test_not_found_is_permanent_and_rate_limit_is_transient_with_retry_after():
     assert (r.failure.code, r.failure.transient, r.failure.retry_after_seconds) == ("rate_limited", True, 30.0)
 
 
-def test_unreachable_is_a_network_failure():
-    r = run(service(FakeFetcher(error="ConnectionError: name resolution failed")))
-    assert (r.outcome, r.failure.code, r.failure.category) == ("failed", "unreachable", "network")
+def test_unreachable_is_a_transient_network_failure():
+    r = run(service(FakeFetcher(error="ConnectError: temporary failure in name resolution")))
+    assert (r.outcome, r.failure.code, r.failure.category, r.failure.transient) == (
+        "failed",
+        "unreachable",
+        "network",
+        True,
+    )
+
+
+def test_a_host_that_does_not_exist_is_a_permanent_network_failure():
+    r = run(service(FakeFetcher(error=HostNotFound("missing.example.test"))))
+    assert (r.outcome, r.failure.code, r.failure.category, r.failure.transient) == (
+        "failed",
+        "host_not_found",
+        "network",
+        False,
+    )
+    assert r.evidence.attempts[0].assessment.primary == "unreachable"
+
+
+def test_a_redirect_loop_is_a_permanent_website_failure():
+    r = run(service(FakeFetcher(error=RedirectLoop("more than 10 redirects"))))
+    assert (r.outcome, r.failure.code, r.failure.category, r.failure.transient) == (
+        "failed",
+        "redirect_loop",
+        "website",
+        False,
+    )
+    assert r.failure.retry_after_seconds is None and r.document is None
 
 
 def test_non_html_documents_are_captured_as_sent():

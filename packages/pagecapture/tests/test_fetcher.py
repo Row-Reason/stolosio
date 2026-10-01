@@ -2,11 +2,21 @@
 cookies."""
 
 import asyncio
+import socket
 
 import httpx
 import pytest
 
-from pagecapture import ExcludedUrl, Exclusion, FetchError, HttpxFetcher, Settings, UnsupportedMediaType
+from pagecapture import (
+    ExcludedUrl,
+    Exclusion,
+    FetchError,
+    HostNotFound,
+    HttpxFetcher,
+    RedirectLoop,
+    Settings,
+    UnsupportedMediaType,
+)
 
 HTML = [("content-type", "text/html; charset=utf-8")]
 
@@ -103,3 +113,60 @@ def test_no_response_is_a_fetch_error():
 
     with pytest.raises(FetchError):
         fetch(Down())
+
+
+class ProxyRefused(httpx.AsyncBaseTransport):
+    """An egress proxy refusing CONNECT: httpx only sees the status line, not why."""
+
+    async def handle_async_request(self, request):
+        raise httpx.ProxyError("503 Service Unavailable")
+
+
+def resolver(monkeypatch, answer):
+    """Replace the system resolver: `answer` is an address list, or the gaierror errno to fail with."""
+    asked = []
+
+    def getaddrinfo(host, *args, **kwargs):
+        asked.append(host)
+        if isinstance(answer, int):
+            raise socket.gaierror(answer, "resolver says no")
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (a, 0)) for a in answer]
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+    return asked
+
+
+def test_a_redirect_loop_is_a_redirect_loop_not_a_fetch_error():
+    site = Site({"/": (301, [("location", "/")], b"")})
+    with pytest.raises(RedirectLoop):
+        fetch(site)
+    assert len(site.seen) == 11
+
+
+def test_a_refused_connection_to_a_missing_host_is_host_not_found(monkeypatch):
+    asked = resolver(monkeypatch, socket.EAI_NONAME)
+    with pytest.raises(HostNotFound) as e:
+        fetch(ProxyRefused(), url="https://user:secret@missing.example.test/a?token=1")
+    assert e.value.host == "missing.example.test" and "secret" not in str(e.value)
+    assert asked == ["missing.example.test."]  # absolute: no resolver search domains
+
+
+def test_a_refused_connection_to_an_existing_host_stays_a_transient_fetch_error(monkeypatch):
+    resolver(monkeypatch, ["93.184.215.14"])
+    with pytest.raises(FetchError) as e:
+        fetch(ProxyRefused())
+    assert not isinstance(e.value, HostNotFound)
+
+
+def test_a_temporary_resolver_failure_is_not_proof_the_host_is_missing(monkeypatch):
+    resolver(monkeypatch, socket.EAI_AGAIN)
+    with pytest.raises(FetchError) as e:
+        fetch(ProxyRefused())
+    assert not isinstance(e.value, HostNotFound)
+
+
+def test_an_address_literal_is_never_looked_up(monkeypatch):
+    asked = resolver(monkeypatch, socket.EAI_NONAME)
+    with pytest.raises(FetchError) as e:
+        fetch(ProxyRefused(), url="https://192.0.2.1/")
+    assert not isinstance(e.value, HostNotFound) and asked == []

@@ -37,8 +37,10 @@ from .adapters import (
     ExcludedUrl,
     Fetcher,
     FetchError,
+    HostNotFound,
     HttpResponse,
     HttpxFetcher,
+    RedirectLoop,
     UnsupportedMediaType,
     media_type,
 )
@@ -164,7 +166,15 @@ class CaptureService:
             result.evidence.attempts.append(
                 Attempt("http", "direct", None, elapsed_ms(), Assessment(primary="unreachable"), "fail", str(e))
             )
-            result.failure = failures.failure("unreachable", str(e))
+            result.failure = failures.failure(
+                "host_not_found" if isinstance(e, HostNotFound) else "unreachable", str(e)
+            )
+            return self._finish(result)
+        except RedirectLoop as e:
+            result.evidence.attempts.append(
+                Attempt("http", "direct", None, elapsed_ms(), Assessment(primary="unreachable"), "fail", str(e))
+            )
+            result.failure = failures.failure("redirect_loop", str(e))
             return self._finish(result)
         except ExcludedUrl as e:
             result.evidence.attempts.append(

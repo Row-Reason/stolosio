@@ -197,7 +197,9 @@ request; **503** only when the service can't accept requests at all (same body s
 | `geo_blocked` | website | no | 451, or "not available in your region" |
 | `bot_challenge` | website | no | a bot challenge that wasn't passed: not requested, or resolution failed (`resolution_attempted`) |
 | `bot_blocked` | website | no | a block page refusing this client or IP; resolution is tried only on a proxied challenge tier (`resolution_attempted`) |
-| `unreachable` | network | yes | no HTTP response: DNS, connection, TLS, timeout |
+| `redirect_loop` | website | no | the redirects don't end: a loop, or more than 10 hops |
+| `unreachable` | network | yes | no HTTP response: connection, TLS, timeout, a DNS failure not confirmed as a missing host |
+| `host_not_found` | network | no | the host (the URL's or a redirect's) doesn't exist: a resolver confirmed it has no such name (NXDOMAIN) or no address |
 | `capacity` | gateway | yes | no browser capacity right now |
 | `browser_unavailable` | gateway | yes | a browser was needed but couldn't be used |
 | `deadline_exceeded` | gateway | yes | the capture couldn't finish within the deadline |

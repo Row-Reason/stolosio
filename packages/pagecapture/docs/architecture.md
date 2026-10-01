@@ -35,7 +35,9 @@ Wrongly accepting incomplete content (lost content) is worse than a needless ren
 
 ## The ladder (`service.py`)
 
-1. **Plain HTTP** through the host's fetcher. No response → `failed: unreachable` (network).
+1. **Plain HTTP** through the host's fetcher. No response → `failed: unreachable` (network, transient), or
+   `host_not_found` (network, permanent) when a resolver confirms the host doesn't exist; redirects that don't end →
+   `failed: redirect_loop` (website, permanent).
 2. **Classify** the response with **rules** (`classify/`), reasons in priority order: status codes, content type,
    vendor challenge headers and markup, login redirects, explicit block / parking / maintenance wording, and
    near-certain app-shell evidence (an empty framework mount, a JavaScript notice). Status, header and redirect

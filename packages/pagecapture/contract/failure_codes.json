@@ -43,9 +43,17 @@
     "category": "website",
     "transient": false
   },
+  "redirect_loop": {
+    "category": "website",
+    "transient": false
+  },
   "unreachable": {
     "category": "network",
     "transient": true
+  },
+  "host_not_found": {
+    "category": "network",
+    "transient": false
   },
   "capacity": {
     "category": "gateway",

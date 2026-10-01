@@ -91,7 +91,7 @@ Chromium. Container exec by an administrator remains a privileged operation.
 `HTTP_FETCH_PROXY_URL` is required for capture's plain HTTP fetches (local default:
 `http://localhost:3128`). Compose and Helm configure it automatically. Environment
 proxy variables are ignored. The proxy's own error answers fail the capture as
-`unreachable`, and network-policy denials fail it as `excluded`; neither is retried in a
+`unreachable` (or `host_not_found` when a resolver confirms the host doesn't exist), and network-policy denials fail it as `excluded`; neither is retried in a
 browser. Every HTTP redirect is checked against the domain blocklist before it is sent.
 
 The Helm value `egress.extraBlockedCidrs` adds deployment-specific address ranges,
