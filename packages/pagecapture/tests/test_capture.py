@@ -401,6 +401,47 @@ def test_an_accepted_xml_document_is_captured_as_sent():
     assert r.outcome == "captured" and r.document.media_type == "application/xml"
 
 
+URLSET = (
+    '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+    + "".join(f"<url><loc>https://example.test/p/{i}</loc></url>" for i in range(50))
+    + "</urlset>"
+)
+XML_VIEWER = (
+    "<html><body><div>This XML file does not appear to have any style information associated with it.</div>"
+    + "".join(f"<p>https://example.test/p/{i} and more words in the browser's tree view</p>" for i in range(80))
+    + "</body></html>"
+)
+
+
+@pytest.mark.parametrize("media", ["application/xml", "text/xml", "application/rss+xml"])
+def test_xml_is_returned_as_sent_and_never_rendered(media):
+    managed = FakeTier("managed", XML_VIEWER)
+    r = run(service(FakeFetcher(body=URLSET, headers=[("Content-Type", f"{media}; charset=utf-8")]), managed=managed))
+    assert r.outcome == "captured" and managed.calls == 0
+    assert r.document.representation == "response_body" and r.document.media_type == media
+    assert r.document.body == URLSET.encode()
+    assert r.evidence.attempts[-1].decision_reason == f"XML ({media}): returned as sent"
+
+
+def test_xhtml_is_still_rendered_to_verify():
+    managed = FakeTier("managed", ARTICLE)
+    r = run(service(FakeFetcher(headers=[("Content-Type", "application/xhtml+xml")]), managed=managed))
+    assert managed.calls == 1 and r.evidence.attempts[0].decision == "escalate"
+
+
+@pytest.mark.parametrize("media", ["application/xml", "text/xml"])
+def test_a_challenge_served_as_xml_is_still_classified(media):
+    fetcher = FakeFetcher(status=403, body=CHALLENGE, headers=[("Content-Type", media), ("cf-mitigated", "challenge")])
+    r = run(service(fetcher, managed=FakeTier("managed", XML_VIEWER)))
+    assert r.outcome == "failed" and r.failure.code == "bot_challenge"
+
+
+def test_a_block_page_served_as_xml_is_still_classified():
+    fetcher = FakeFetcher(status=403, body=BLOCK_PAGE, headers=[("Content-Type", "text/xml"), ("Server", "cloudflare")])
+    r = run(service(fetcher, managed=FakeTier("managed", XML_VIEWER)))
+    assert r.outcome == "failed" and r.failure.code == "bot_blocked"
+
+
 def test_an_error_page_keeps_its_failure_but_drops_an_unaccepted_body():
     fetcher = FakeFetcher(
         status=429, body='{"error": "slow down"}', headers=[("Content-Type", "application/json"), ("Retry-After", "60")]

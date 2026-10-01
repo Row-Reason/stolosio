@@ -63,7 +63,7 @@ plain HTTP ─► blocked / broken / unreachable ──────────�
     │
     ├─ a type outside `accept` ──────────────────────────────────────────────────────► failed (unsupported_media_type)
     │
-    ├─ another accepted type (XML, …) ───────────────────────────────────────────────► captured (response_body)
+    ├─ another accepted type, or XML (never rendered) ───────────────────────────────► captured (response_body)
     │
     ├─ a body over the size cap (10 MiB) ─► managed browser (never returned as partial exact bytes)
     │
