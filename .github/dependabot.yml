@@ -16,3 +16,9 @@ updates:
     directory: /runtime
     schedule:
       interval: weekly
+    # This suppresses every Ubuntu major-version proposal, including future LTS transitions.
+    # Review Ubuntu 26.04 LTS suitability now that it is available; any upgrade needs a
+    # separate approved issue and compatibility testing.
+    ignore:
+      - dependency-name: "ubuntu"
+        update-types: ["version-update:semver-major"]
