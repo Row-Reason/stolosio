@@ -15,6 +15,7 @@ import requests
 from bs4 import BeautifulSoup, NavigableString, Tag, XMLParsedAsHTMLWarning
 
 MARKUP_TYPES = {"text/html", "application/xhtml+xml", "application/xml", "text/xml"}
+XML_TYPES = {"application/xml", "text/xml"}
 INVISIBLE = {"script", "style", "noscript", "template", "svg", "title", "head", "meta", "link"}
 CHROME = {"nav", "header", "footer", "aside"}
 MOUNT_IDS = {"root", "app", "__next", "__nuxt", "___gatsby", "svelte", "main-app", "application", "react-root"}
@@ -28,6 +29,12 @@ JS_REDIRECT = re.compile(r"location(\.href)?\s*=|location\.(replace|assign)\(", 
 LANDER_REDIRECT = re.compile(r"""location(\.href)?\s*=\s*["'][^"']*/lander""", re.I)
 # Chinese, Japanese, Thai, Lao, Khmer and Burmese are written without spaces between words.
 NO_SPACE_SCRIPT = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff]")
+
+
+def is_xml(media_type: str | None) -> bool:
+    """XML data (sitemaps, feeds, …), as opposed to HTML: a browser would only show it in its XML viewer."""
+    mt = (media_type or "").lower()
+    return mt in XML_TYPES or (mt.endswith("+xml") and mt != "application/xhtml+xml")
 
 
 def word_count(text: str) -> int:
