@@ -15,7 +15,9 @@ FAILURES: dict[str, tuple[str, bool]] = {
     "geo_blocked": ("website", False),
     "bot_challenge": ("website", False),  # a challenge a real browser can pass; resolvable on request
     "bot_blocked": ("website", False),  # a block page refusing this client/IP; only another identity helps
+    "redirect_loop": ("website", False),  # the redirects don't end (a loop, or past the hop limit)
     "unreachable": ("network", True),
+    "host_not_found": ("network", False),  # a resolver confirmed the host doesn't exist (NXDOMAIN) or has no address
     "capacity": ("gateway", True),
     "browser_unavailable": ("gateway", True),
     "deadline_exceeded": ("gateway", True),
@@ -27,7 +29,8 @@ FAILURES: dict[str, tuple[str, bool]] = {
 }
 
 # Assessment reason (docs/labels.md) -> failure code, for reasons that end a capture. (No response at all and bot
-# protection are decided by the service itself: unreachable, bot_challenge / bot_blocked.)
+# protection are decided by the service itself: unreachable, host_not_found, redirect_loop, bot_challenge /
+# bot_blocked.)
 REASON_FAILURE = {
     "rate_limited": "rate_limited",
     "geo_blocked": "geo_blocked",

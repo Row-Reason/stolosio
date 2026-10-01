@@ -7,6 +7,8 @@ endpoint (e.g. browserless) for browsers.
 
 import asyncio
 import email.utils
+import ipaddress
+import socket
 import time
 from dataclasses import dataclass, field, replace
 from typing import Protocol
@@ -73,6 +75,28 @@ class FetchError(Exception):
     """No HTTP response at all (DNS, connection, TLS, timeout)."""
 
 
+class HostNotFound(FetchError):
+    """A host on the way (the URL's, or a redirect's) does not exist: a resolver said it has no such name (NXDOMAIN)
+    or no address. Permanent, unlike a temporary resolver failure, which stays a plain FetchError."""
+
+    def __init__(self, host: str):
+        super().__init__(f"the host name does not resolve: {host}")
+        self.host = host
+
+
+class EgressError(FetchError):
+    """The host's egress proxy answered instead of the site (its own error page). The fetcher checks whether the
+    hop's host exists before reporting it as a plain FetchError."""
+
+    def __init__(self, message: str, host: str):
+        super().__init__(message)
+        self.host = host
+
+
+class RedirectLoop(Exception):
+    """The redirects did not end within the limit: a loop, or an endless chain. Permanent."""
+
+
 class ExcludedUrl(Exception):
     """A redirect led to a URL the request excludes (or the host's own network policy blocks)."""
 
@@ -93,7 +117,8 @@ class Fetcher(Protocol):
     async def fetch(
         self, url: str, timeout_s: float, exclusions: tuple[Exclusion, ...] = (), accept: tuple[str, ...] | None = None
     ) -> HttpResponse:
-        """Fetch over plain HTTP following redirects. Raise FetchError when there is no response, ExcludedUrl when a
+        """Fetch over plain HTTP following redirects. Raise FetchError when there is no response (HostNotFound when a
+        resolver confirms the host doesn't exist), RedirectLoop when the redirects don't end, ExcludedUrl when a
         hop is excluded, and UnsupportedMediaType, before reading the body, when a successful response declares a media
         type that isn't accepted (error responses are read: their status and page say what went wrong)."""
 
@@ -122,6 +147,41 @@ class _SharedPool(httpx.AsyncBaseTransport):
         pass
 
 
+# getaddrinfo's answers that a name doesn't exist or has no address (anything else, e.g. EAI_AGAIN, is not proof).
+_NO_SUCH_HOST = frozenset(code for code in (socket.EAI_NONAME, getattr(socket, "EAI_NODATA", None)) if code is not None)
+MAX_REDIRECTS = 10
+HOST_CHECK_TIMEOUT_S = 5.0
+
+
+async def host_not_found(host: str, timeout_s: float = HOST_CHECK_TIMEOUT_S) -> bool:
+    """Whether the resolver says `host` has no such name or no address. Resolved as an absolute name (no search
+    domains). Addresses, a temporary resolver failure or a timeout are not proof: False."""
+    host = host.strip("[]").rstrip(".")
+    if not host or timeout_s <= 0:
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return False  # an address literal has nothing to resolve
+    except ValueError:
+        pass
+    try:
+        async with asyncio.timeout(timeout_s):
+            await asyncio.get_running_loop().getaddrinfo(f"{host}.", None, type=socket.SOCK_STREAM)
+    except socket.gaierror as e:
+        return e.errno in _NO_SUCH_HOST
+    except (OSError, TimeoutError, UnicodeError):
+        return False
+    return False
+
+
+def _host_of(error: httpx.RequestError, url: str) -> str:
+    """The failed hop's host (a redirect's, not necessarily the URL's), as ASCII (IDNA)."""
+    try:
+        return error.request.url.raw_host.decode("ascii")
+    except RuntimeError:  # no request attached
+        return httpx.URL(url).raw_host.decode("ascii")
+
+
 class HttpxFetcher:
     """Default fetcher: httpx with the bot identity, every redirect hop checked against the exclusions, the declared
     media type checked before the body is read, and the body read up to the size cap. `proxy` sends every fetch
@@ -141,7 +201,7 @@ class HttpxFetcher:
         self._headers = {"User-Agent": self.s.user_agent, "Accept": ACCEPT_HEADER, "Accept-Language": "en-US,en;q=0.9"}
 
     def check_hop(self, response: httpx.Response) -> None:
-        """Every response on the way, redirects included, before it's followed or read. A host raises FetchError here
+        """Every response on the way, redirects included, before it's followed or read. A host raises EgressError here
         for answers that come from its egress rather than the site (stolosio: its proxy's own error pages)."""
 
     async def fetch(
@@ -156,12 +216,16 @@ class HttpxFetcher:
             self.check_hop(response)
 
         start = time.perf_counter()
+
+        def remaining() -> float:
+            return min(HOST_CHECK_TIMEOUT_S, timeout_s - (time.perf_counter() - start))
+
         client = httpx.AsyncClient(
             transport=_SharedPool(self._pool),
             headers=self._headers,
             trust_env=False,
             follow_redirects=True,
-            max_redirects=10,
+            max_redirects=MAX_REDIRECTS,
             timeout=min(timeout_s, 30),
             event_hooks={"request": [check], "response": [check_response]},
         )
@@ -181,8 +245,22 @@ class HttpxFetcher:
                         response.truncated = True
                         break
                 response.body = bytes(body[: self.s.http_max_response_bytes])
+        except EgressError as e:
+            # The proxy's DNS failure (squid ERR_DNS_FAIL) can be NXDOMAIN or a resolver hiccup: ask a resolver.
+            if await host_not_found(e.host, remaining()):
+                raise HostNotFound(e.host) from e
+            raise
         except TimeoutError as e:
             raise FetchError(f"no complete response within {timeout_s:.0f} s") from e
+        except httpx.TooManyRedirects as e:
+            raise RedirectLoop(f"more than {MAX_REDIRECTS} redirects") from e
+        except (httpx.ConnectError, httpx.ProxyError) as e:
+            # No connection, directly or through the proxy (whose refused CONNECT hides why): a missing host is
+            # permanent, anything else may pass.
+            host = _host_of(e, url)
+            if await host_not_found(host, remaining()):
+                raise HostNotFound(host) from e
+            raise FetchError(f"{type(e).__name__}: {e}"[:300]) from e
         except (httpx.HTTPError, httpx.InvalidURL) as e:
             raise FetchError(f"{type(e).__name__}: {e}"[:300]) from e
         response.elapsed_ms = (time.perf_counter() - start) * 1000

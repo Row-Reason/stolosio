@@ -34,7 +34,9 @@ failure a few times; one that still fails refuses the capture with 503 and detai
 ## Egress and network policy
 
 The plain fetch goes through the egress proxy (`HTTP_FETCH_PROXY_URL`) only, never the API
-process's own network; the proxy's own error answers fail the capture as `unreachable`. Stolosio's
+process's own network; the proxy's own error answers (and a refused `CONNECT`) fail the capture as
+`unreachable` (transient), or as `host_not_found` (permanent) when the API's resolver confirms the
+host has no such name or no address: the proxy's DNS failure alone can be a resolver hiccup. Stolosio's
 network policy joins the request's exclusions, so a blocked domain is refused on every redirect hop
 and for every browser request (`excluded`). Browsers enforce exclusions through the CDP Fetch
 domain, which also catches redirect hops.
@@ -55,6 +57,8 @@ BrowserQL unblocks the page through a residential proxy (`BROWSERLESS_CLOUD_PROX
   maintenance worker purges entries unseen for `CAPTURE_METHOD_CACHE_RETENTION_DAYS` (30).
 - Every capture writes a `capture.completed` outbox event: outcome, failure code and category,
   tiers used, duration, browser seconds, whether a paid tier was used, bytes.
+- A failed capture logs a warning with its failure code, category, transience and session id;
+  never the URL or the failure message, which may carry credentials.
 - Metrics: `stolosio_captures_total{outcome,category}`, `stolosio_capture_rejected_total{reason}`,
   `stolosio_capture_duration_seconds{tier}`, `stolosio_capture_browser_seconds_total{tier}`,
   `stolosio_capture_paid_total`.
