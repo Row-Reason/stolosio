@@ -38,7 +38,13 @@ Browserless cloud is used only when named. A `/v1/connect` client names it with
 `stolosio.provider.slug=browserless_cloud` and may pick the residential exit country with
 `stolosio.browserless.proxy_country` (default `BROWSERLESS_CLOUD_PROXY_COUNTRY`, `jp`). It is
 disabled until an operator enables it, which needs `BROWSERLESS_CLOUD_TOKEN`; its concurrent-session
-limit (seeded at 15, the Prototyping plan's) bounds both endpoints. It can mirror a
+limit (seeded at 15) bounds both endpoints. Browserless's pricing page (checked 2026-10-02) lists
+the Prototyping plan as "10 max concurrent browsers+5" without saying what the "+5" is, and
+Browserless cloud exposes no account, usage or `/pressure` endpoint to read the plan's limit (only
+`/meta`, the version). When Browserless itself refuses (429, 402, or a BrowserQL error naming a
+concurrency, rate or quota limit), the capture fails as `capacity`, never `browser_unavailable`
+(`docs/CAPTURE.md`); the API log line names the HTTP status, so a limit set above the plan shows
+up there, and the limit should then be lowered to the plan's base concurrency. It can mirror a
 subscription allowance or be set lower as a cost guardrail, and Stolosio applies it
 transactionally before connecting. Cloud browsers sit outside
 Stolosio's egress firewall, so the network policy is applied in the browser.
