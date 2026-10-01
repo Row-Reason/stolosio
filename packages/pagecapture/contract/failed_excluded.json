@@ -44,7 +44,7 @@
     "versions": {
       "pagecapture": "0.2.0",
       "classifier": "rules",
-      "renderer": "adaptive-4"
+      "renderer": "adaptive-5"
     }
   }
 }

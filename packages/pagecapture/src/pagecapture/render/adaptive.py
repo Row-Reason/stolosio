@@ -2,13 +2,13 @@
 to scroll. No per-site configuration.
 
 1. Load until the HTML is parsed, then wait while *content* keeps growing (background network noise is ignored).
-2. A page that is still nearly empty, or has an empty app container, is probably an app still starting: keep
-   waiting while content arrives (up to boot_cap_s).
+2. A page that is still nearly empty, has an empty app container, or still shows a text placeholder ("Loading...")
+   in its main content, is probably an app still starting: keep waiting while content arrives (up to boot_cap_s).
 3. Close an obvious consent dialog with its reject / necessary-only button.
 4. Scroll a screen at a time to the bottom (the window, or the inner panel that scrolls). Stretches that add
    nothing are crossed faster, with a 10-screen-tall window (viewport-triggered lazy loading still fires).
    At the bottom, give late sections a moment; stop when nothing more arrives.
-5. If loading placeholders are still visible, one short last wait.
+5. While loading placeholders are still visible, a short last wait (up to PENDING_CAP_S).
 
 Content is collected across all snapshots: virtualized lists drop items that scroll out of view, so the final
 DOM can hold less than the page showed. `Rendered.virtualized` flags when that happened.
@@ -30,7 +30,7 @@ from . import scripts
 
 log = logging.getLogger(__name__)
 
-RENDERER_VERSION = "adaptive-4"  # bump when the algorithm changes (reported in capture evidence)
+RENDERER_VERSION = "adaptive-5"  # bump when the algorithm changes (reported in capture evidence)
 
 
 def content_lines(text: str) -> set[str]:
@@ -109,6 +109,7 @@ class PageBusy(Exception):
 
 
 BUSY_S = 8.0
+PENDING_CAP_S = 3.0  # the last wait for visible loading placeholders
 DRIVER_GONE = "Connection closed while reading from the driver"
 NAVIGATED = re.compile(r"Execution context was destroyed|navigat|Cannot find context|Frame was detached", re.I)
 
@@ -288,10 +289,10 @@ async def _explore(page, s: Settings, session: _Session, early_dom: bool) -> Non
 
     state = await session.eval(scripts.PAGE_STATE)
     boot = time.perf_counter()
-    while (state["chars"] < 1500 or state["mount"]) and time.perf_counter() - boot < s.boot_cap_s:
+    while booting(state) and time.perf_counter() - boot < s.boot_cap_s:
         added = await session.settle("boot", quiet_s=2.0, cap_s=4.0)
         state = await session.eval(scripts.PAGE_STATE)
-        if added == 0 and state["chars"] >= 300 and not state["mount"]:
+        if added == 0 and state["chars"] >= 300 and not state["mount"] and not state["placeholders"]:
             break
 
     clicked = await session.eval(scripts.REJECT_CONSENT)
@@ -321,8 +322,15 @@ async def _explore(page, s: Settings, session: _Session, early_dom: bool) -> Non
                 if late < 3 and target["at_bottom"]:
                     break
         state = await session.eval(scripts.PAGE_STATE)
-    if state["pending"]:
-        await session.settle("pending", quiet_s=1.0, cap_s=3.0)
+    pending_end = time.perf_counter() + PENDING_CAP_S
+    while state["pending"] and (left := pending_end - time.perf_counter()) > 0:
+        await session.settle("pending", quiet_s=1.0, cap_s=left)
+        state = await session.eval(scripts.PAGE_STATE)
+
+
+def booting(state: dict) -> bool:
+    """An app still starting: little text, an empty app container, or main content still saying "Loading..."."""
+    return state["chars"] < 1500 or state["mount"] or bool(state["placeholders"])
 
 
 class Renderer:
