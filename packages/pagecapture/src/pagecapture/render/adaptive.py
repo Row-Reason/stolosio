@@ -30,7 +30,7 @@ from . import scripts
 
 log = logging.getLogger(__name__)
 
-RENDERER_VERSION = "adaptive-4"  # bump when the algorithm changes (reported in capture evidence)
+RENDERER_VERSION = "adaptive-5"  # bump when the algorithm changes (reported in capture evidence)
 
 
 def content_lines(text: str) -> set[str]:
@@ -228,10 +228,11 @@ class _Session:
         return self.added_since(before)
 
 
-async def wait_out_challenge(page, session: _Session, cap_s: float) -> None:
+async def wait_out_challenge(page, session: _Session, cap_s: float) -> bool:
     """A bot challenge the browser may pass (or a provider solves): wait until the real page has replaced it, before
     any snapshot, so challenge text never counts as content. The challenge page navigates away when passed."""
     start, seen = time.perf_counter(), False
+    state = {"challenged": True, "ready": False}
     while time.perf_counter() - start < cap_s:
         try:
             state = await page.evaluate(scripts.CHALLENGE_STATE, [list(CHALLENGE_TITLES), list(CHALLENGE_MARKUP)])
@@ -243,6 +244,7 @@ async def wait_out_challenge(page, session: _Session, cap_s: float) -> None:
         await asyncio.sleep(0.5)
     if seen:
         session.log("challenge")
+    return not state["challenged"]
 
 
 async def adaptive_render(
@@ -258,10 +260,10 @@ async def adaptive_render(
     DOM right after the first snapshot, as a fallback for remote browsers whose pages may stop answering."""
     if navigate:
         await page.goto(url, wait_until="domcontentloaded", timeout=s.navigation_timeout_s * 1000)
-    if challenge_wait_s:
-        await wait_out_challenge(page, session, challenge_wait_s)
+    cleared = not challenge_wait_s or await wait_out_challenge(page, session, challenge_wait_s)
     try:
-        await _explore(page, s, session, early_dom)
+        if cleared:
+            await _explore(page, s, session, early_dom)
     except PageBusy as e:  # stop exploring and keep what the page has; its main thread may come back for the read
         session.log(f"page busy: stopped exploring ({e})")
     # the final DOM, taken while the page is known to respond (some remote browsers stop answering soon after)

@@ -85,12 +85,18 @@ def report(path: str) -> None:
     recs = [r for r in recs if "error" not in r]
     print(f"{len(recs)} captures ({len(errors)} harness errors)\n")
     used = [r for r in recs if "challenge_resolution" in r["tiers"]]
-    free = [r for r in recs if "challenge_resolution" not in r["tiers"]]
+    local = [r for r in recs if "local_resolution" in r["tiers"]]
+    local_only = [r for r in local if "challenge_resolution" not in r["tiers"]]
+    free = [r for r in recs if not {"local_resolution", "challenge_resolution"}.intersection(r["tiers"])]
     print(
         f"not challenged today (no paid tier used): {len(free)}  "
         + ", ".join(f"{k}: {v}" for k, v in Counter(r["failure"] or r["outcome"] for r in free).most_common())
     )
-    print(f"sent to the challenge tier: {len(used)}\n")
+    print(
+        f"local resolution attempted: {len(local)}; no paid fallback: {len(local_only)}; "
+        f"captured locally: {sum(r['outcome'] == 'captured' for r in local_only)}"
+    )
+    print(f"sent to the paid challenge tier: {len(used)}\n")
     for kind in ("challenge", "block_page"):
         rows = [r for r in used if r["kind"] == kind]
         if not rows:

@@ -1,24 +1,9 @@
-"""The capture service: one request in, a trustworthy document or a total failure out (docs/api.md).
+"""Capture acquisition and validation, with automatic local challenge resolution.
 
-Escalation ladder, decided by assessments, never by the caller:
-
-    plain HTTP ─► usable ───────────────────────────────────────────────────────► captured (response_body)
-        │
-        ├─ content missing (app_shell / partial) or interstitial ─► managed browser ─► captured (rendered_html)
-        │                                                              │
-        │                                                              └─ bot challenge ─┐
-        ├─ bot challenge ────────────────────────────────────────────────────────────────┴─► challenge resolution
-        │                                                                     (only if resolve_bot_challenges)
-        │                                                                     (block pages only on a proxied tier)
-        └─ blocked / broken / unreachable ──────────────────────────────────────────────► failed (with evidence)
-
-The caller's exclusions hold on every redirect hop and for every browser request; a capture that would reach an
-excluded URL fails as `excluded`. A media type outside the caller's `accept` fails as `unsupported_media_type`,
-without reading the body.
-
-Bot protection ends in one of two failures: `bot_challenge` (a challenge a real browser can pass: resolvable on
-request) or `bot_blocked` (a block page refusing this client or IP: only a proxied challenge tier may get through,
-so without one it fails fast instead of paying for a render that can't succeed).
+Plain HTTP and managed rendering precede local resolution; only paid challenge
+resolution requires resolve_bot_challenges. Each stage is assessed independently.
+The local resolver retries with a native browser identity and a bounded wait.
+Exclusions, content validation and the capture deadline apply to every local attempt.
 """
 
 import asyncio
@@ -103,17 +88,21 @@ class CaptureService:
         challenge_resolution: BrowserTier | None = None,
         classifier: Classifier | None = None,
         cache: MethodCache | None = None,
+        local_resolution: BrowserTier | None = None,
     ):
         self.settings = settings or Settings()
         s = self.settings
         self.fetcher = fetcher or HttpxFetcher(s)
         self.managed = managed or (CdpBrowserTier(s.browser_ws, "managed", False, s) if s.browser_ws else None)
+        self.local_resolution = local_resolution or (
+            CdpBrowserTier(s.browser_ws, "local_resolution", False, s) if s.browser_ws else None
+        )
         self.challenge_resolution = challenge_resolution or _challenge_tier(s)
         self.classifier = classifier or Classifier(s)
         self.policy = MethodPolicy(cache if cache is not None else default_cache(s), s)
 
     async def close(self) -> None:
-        for part in (self.fetcher, self.managed, self.challenge_resolution):
+        for part in (self.fetcher, self.managed, self.local_resolution, self.challenge_resolution):
             if hasattr(part, "close"):
                 await part.close()
 
@@ -298,12 +287,26 @@ class CaptureService:
     def _why_not_resolve(self, request, block: str | None) -> str | None:
         """Why challenge resolution won't be tried for this page, or None when it will."""
         if not request.resolve_bot_challenges:
-            return "resolution not requested"
+            return "paid resolution not permitted"
         if self.challenge_resolution is None:
             return "no challenge-resolution tier configured"
         if block and not getattr(self.challenge_resolution, "proxied", False):
             return "the challenge tier has no proxies, and a block page refuses the identity, not the browser"
         return None
+
+    def _next_resolution(self, request, result, block):
+        """Local resolution precedes caller-gated paid fallback; neither repeats."""
+        used = {a.tier for a in result.evidence.attempts}
+        if self.local_resolution is not None and "local_resolution" not in used:
+            return self.local_resolution, None
+        if "challenge_resolution" in used:
+            return None, "resolution did not pass it"
+        why = self._why_not_resolve(request, block)
+        return (self.challenge_resolution, None) if why is None else (None, why)
+
+    @staticmethod
+    def _resolution_attempted(result):
+        return any(a.tier in {"local_resolution", "challenge_resolution"} for a in result.evidence.attempts)
 
     @staticmethod
     def _http_block(url: str, http: HttpResponse) -> str | None:
@@ -314,15 +317,15 @@ class CaptureService:
         return failures.failure("bot_blocked" if block else "bot_challenge", reason, resolution_attempted=attempted)
 
     async def _challenge(self, request, result, attempt, http, http_doc, remaining, block: str | None) -> CaptureResult:
-        """Bot protection on the plain response: only challenge resolution may help, and only when asked for."""
+        """Try local resolution before caller-gated paid fallback."""
         what = block or "bot challenge"
-        why_not = self._why_not_resolve(request, block)
-        if why_not is None:
-            attempt.decision, attempt.decision_reason = "escalate", f"{what}: resolving it (requested)"
-            return await self._render(request, result, self.challenge_resolution, http, http_doc, remaining)
+        tier, why_not = self._next_resolution(request, result, block)
+        if tier is not None:
+            attempt.decision, attempt.decision_reason = "escalate", f"{what}: trying {tier.tier}"
+            return await self._render(request, result, tier, http, http_doc, remaining)
         attempt.decision, attempt.decision_reason = "fail", f"{what}: {why_not}"
         result.document = http_doc
-        result.failure = self._bot_failure(block, attempt.decision_reason, False)
+        result.failure = self._bot_failure(block, attempt.decision_reason, self._resolution_attempted(result))
         return self._finish(result)
 
     def _keep_http(self, result: CaptureResult, http_doc: Document, why: str) -> CaptureResult:
@@ -346,8 +349,13 @@ class CaptureService:
                 return self._keep_http(result, http_doc, "no time left to render")
             result.document, result.failure = http_doc, failures.failure("deadline_exceeded", "no time left to render")
             return self._finish(result)
+        render_started = time.monotonic()
         try:
-            rendered = await tier.render(request.url, deadline_s=remaining() - 2, exclusions=request.exclusions)
+            render_budget = remaining() - 2
+            if tier.tier == "local_resolution":
+                render_budget = min(render_budget, self.settings.local_resolution_cap_s)
+            async with asyncio.timeout(render_budget):
+                rendered = await tier.render(request.url, deadline_s=render_budget, exclusions=request.exclusions)
         except ChallengeNotPassed as e:  # the tier tried; the protection held
             result.evidence.attempts.append(
                 Attempt(
@@ -360,6 +368,12 @@ class CaptureService:
                     f"resolution did not pass it: {e}"[:300],
                 )
             )
+            self._record_failed_render(result, tier, render_started)
+            fallback = await self._local_fallback(
+                request, result, tier, http, http_doc, remaining, http_usable, http_page
+            )
+            if fallback is not None:
+                return fallback
             if http_usable:
                 return self._keep_http(result, http_doc, "challenge resolution did not pass")
             result.document = http_doc
@@ -378,6 +392,12 @@ class CaptureService:
                     f"{'no browser capacity' if busy else 'browser unavailable'}: {e!r}"[:300],
                 )
             )
+            self._record_failed_render(result, tier, render_started, acquired=not busy)
+            fallback = await self._local_fallback(
+                request, result, tier, http, http_doc, remaining, http_usable, http_page
+            )
+            if fallback is not None:
+                return fallback
             if http_usable:
                 return self._keep_http(result, http_doc, "no browser capacity" if busy else "browser unavailable")
             result.document = http_doc
@@ -423,6 +443,11 @@ class CaptureService:
         if not rendered.html or (rendered.error and not rendered.lines):
             rendered.error = rendered.error or "no page content could be read"
             attempt.decision, attempt.decision_reason = "fail", f"render failed: {rendered.error}"
+            fallback = await self._local_fallback(
+                request, result, tier, http, http_doc, remaining, http_usable, http_page
+            )
+            if fallback is not None:
+                return fallback
             if http_usable:
                 return self._keep_http(result, http_doc, f"render failed ({rendered.error[:80]})")
             if (
@@ -449,13 +474,13 @@ class CaptureService:
         if primary == "bot_challenge":
             block = rules.block_page(page)
             what = (block or "bot challenge") + " in the browser"
-            why_not = self._why_not_resolve(request, block) if tier.tier == "managed" else "resolution did not pass it"
-            if why_not is None:
-                attempt.decision, attempt.decision_reason = "escalate", f"{what}: resolving it (requested)"
+            next_tier, why_not = self._next_resolution(request, result, block)
+            if next_tier is not None:
+                attempt.decision, attempt.decision_reason = "escalate", f"{what}: trying {next_tier.tier}"
                 return await self._render(
                     request,
                     result,
-                    self.challenge_resolution,
+                    next_tier,
                     http,
                     http_doc,
                     remaining,
@@ -471,7 +496,7 @@ class CaptureService:
             attempt.decision_reason = f"{what}: {why_not}"
             # never downgrade: the plain response is better evidence than a challenge page
             result.document = http_doc
-            result.failure = self._bot_failure(block, attempt.decision_reason, tier.tier == "challenge_resolution")
+            result.failure = self._bot_failure(block, attempt.decision_reason, self._resolution_attempted(result))
             return self._finish(result)
         if primary in BROWSER_REFUSED and http_usable:
             # plain HTTP got a usable page and the browser got an error status: the browser was refused, not the page
@@ -526,6 +551,34 @@ class CaptureService:
                 rendered.status, http.headers if rendered.status == http.status_code else [], http.redirects
             )
         return self._captured(result, rendered_doc)
+
+    @staticmethod
+    def _record_failed_render(result, tier, started, acquired=True):
+        seconds = time.monotonic() - started
+        result.evidence.attempts[-1].duration_ms = round(seconds * 1000, 1)
+        if acquired:
+            result.evidence.cost.browser_seconds += seconds
+            result.evidence.cost.paid |= getattr(tier, "paid", False)
+
+    async def _local_fallback(self, request, result, tier, http, http_doc, remaining, http_usable, http_page):
+        if tier.tier != "local_resolution":
+            return None
+        next_tier, _ = self._next_resolution(request, result, self._http_block(request.url, http))
+        if next_tier is None:
+            return None
+        attempt = result.evidence.attempts[-1]
+        attempt.decision = "escalate"
+        attempt.decision_reason += f"; trying {next_tier.tier}"
+        return await self._render(
+            request,
+            result,
+            next_tier,
+            http,
+            http_doc,
+            remaining,
+            http_usable=http_usable,
+            http_page=http_page,
+        )
 
     def _assess_rendered(self, rendered: Rendered) -> tuple[Assessment, list[str], ParsedPage]:
         """Rules (not the model) on the rendered DOM, plus the renderer's own signals of an unfinished page."""

@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import requests
 
-from .api import Exclusion, Redirect, accepts, excluded
+from .api import Exclusion, Redirect, Tier, accepts, excluded
 from .config import Settings
 from .fetch import make_response
 from .render import Rendered, Renderer
@@ -99,7 +99,7 @@ class Fetcher(Protocol):
 
 
 class BrowserTier(Protocol):
-    tier: str  # "managed" or "challenge_resolution"
+    tier: Tier  # managed rendering, local resolution, or paid challenge resolution
     paid: bool
     proxied: bool  # egresses through proxies (another IP identity): block pages may let it through
 
@@ -198,7 +198,7 @@ class CdpBrowserTier:
     def __init__(
         self,
         ws_url: str,
-        tier: str = "managed",
+        tier: Tier = "managed",
         paid: bool = False,
         settings: Settings | None = None,
         proxied: bool = False,
@@ -209,11 +209,16 @@ class CdpBrowserTier:
         # and uses no request interception, which stalls solvers.
         s = settings or Settings()
         solving = tier == "challenge_resolution"
+        local = tier == "local_resolution"
+        if local:
+            s = replace(s, render_cap_s=s.local_resolution_cap_s - s.local_resolution_wait_s)
         self._renderer = Renderer(
             s,
             endpoint=ws_url,
-            user_agent=None if solving else s.user_agent,
-            challenge_wait_s=s.challenge_resolution_wait_s if solving else s.challenge_wait_s,
+            user_agent=None if solving or local else s.user_agent,
+            challenge_wait_s=(
+                s.local_resolution_wait_s if local else s.challenge_resolution_wait_s if solving else s.challenge_wait_s
+            ),
             intercept=not solving,
         )
         self._started = False
@@ -251,7 +256,7 @@ class BqlBrowserTier:
     def __init__(
         self,
         bql_url: str,
-        tier: str = "challenge_resolution",
+        tier: Tier = "challenge_resolution",
         paid: bool = True,
         settings: Settings | None = None,
         proxied: bool = False,

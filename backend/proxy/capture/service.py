@@ -98,6 +98,17 @@ class CaptureRunner:
         )
         self._fetcher = StolosioFetcher(self._page_settings, proxy=settings.http_fetch_proxy_url)
         self._renderer = SharedRenderer(Renderer(self._page_settings))
+        self._local_renderer = SharedRenderer(
+            Renderer(
+                replace(
+                    self._page_settings,
+                    render_cap_s=self._page_settings.local_resolution_cap_s
+                    - self._page_settings.local_resolution_wait_s,
+                ),
+                user_agent=None,
+                challenge_wait_s=self._page_settings.local_resolution_wait_s,
+            )
+        )
         self._cloud = (
             BqlBrowserTier(
                 browserless_cloud_url(
@@ -117,7 +128,7 @@ class CaptureRunner:
         self._cache = PostgresMethodCache(database_sessions)
 
     async def close(self) -> None:
-        for part in (self._fetcher, self._renderer, self._cloud):
+        for part in (self._fetcher, self._renderer, self._local_renderer, self._cloud):
             if part is not None:
                 await part.close()
 
@@ -174,6 +185,7 @@ class CaptureRunner:
                 self._page_settings,
                 fetcher=self._fetcher,
                 managed=SlotTier(self._renderer, endpoint),
+                local_resolution=SlotTier(self._local_renderer, endpoint, local=True),
                 challenge_resolution=await self._challenge_tier(request, capture, resolved),
                 classifier=self._classifier,
                 cache=self._cache,
@@ -258,6 +270,15 @@ class CaptureRunner:
                 "failure_category": failure.category if failure else None,
                 "representation": result.document.representation if result.document else None,
                 "tiers": tiers,
+                "attempts": [
+                    {
+                        "tier": a.tier,
+                        "decision": a.decision,
+                        "status": a.status_code,
+                        "duration_ms": a.duration_ms,
+                    }
+                    for a in result.evidence.attempts
+                ],
                 "duration_ms": duration_ms,
                 "browser_seconds": cost.browser_seconds,
                 "paid": cost.paid,
