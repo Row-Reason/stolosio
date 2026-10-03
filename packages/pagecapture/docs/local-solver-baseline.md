@@ -91,3 +91,42 @@ results; there were no harness errors or unresolved capacity refusals.
 
 Dataset SHA-256 (`local_solver_urls.txt`):
 `4a86067ec53db3f733d8b16b37ba0829d582f5f2aa4633e05ae46cb3a89577cd`.
+
+## Next experiments
+
+These are hypotheses to test, not demonstrated improvements. The
+[expanded cohort](challenge-dataset.md#periplus-expansion--2026-10-03) adds 30
+Periplus-observed domains; keep the original cohort's score separate.
+
+1. **Allow normal browser resources during local challenge execution.** Today
+   the local tier still blocks images, media and fonts, and its context blocks
+   service workers. A/B test a local-only profile that permits those resources,
+   while preserving network exclusions, the transfer cap and caller deadline.
+   Keep scripts, iframes, Web Workers and WASM functioning; record failed resource
+   requests and console errors in local diagnostic artifacts. This tests whether
+   our capture optimizations interfere with challenge execution. It does not
+   assume that service workers and Web Workers are the same, or that we currently
+   block WASM. Cloudflare's [troubleshooting guide](https://developers.cloudflare.com/cloudflare-challenges/troubleshooting/challenge-solve-issues/)
+   identifies blocked challenge scripts and inconsistent browser state as causes
+   of challenge failures. Native user agent is already enabled locally.
+
+2. **Recognize challenge state and wait according to progress.** The current
+   challenge loop checks generic title/markup signatures for up to 10 seconds;
+   it does not use challenge-specific progress or terminal error states.
+   Start with Anubis/BotStopper: recognize its challenge and denial pages, allow
+   its ordinary browser-executed computation to finish, and stop immediately on
+   explicit denial. Trial a modest larger total budget only when there is evidence
+   of ongoing work; reserve time for content acquisition and paid fallback.
+   Anubis's [release notes](https://github.com/TecharoHQ/anubis/releases/tag/v1.28.0-pre1)
+   document worker/WASM proof-of-work execution and slower JavaScript fallback.
+   That supports testing browser execution and timing, but does not establish
+   which version or algorithm Waarnemingen uses. Its baseline output was a denial,
+   so longer waiting alone is not evidence of a fix.
+
+Before comparing rates, add the observed BotStopper denial to classifier regression
+coverage so error pages cannot inflate the score. Measure accepted target content,
+new successes/lost successes, repeatability, transfer bytes and latency. Run the
+original cohort with paid fallback disabled under the same egress conditions.
+The 55 challenge failures are the first experiment targets; the 30 hard bot blocks
+should be reported separately. No improvement implementation or rerun is included
+in this dataset expansion.

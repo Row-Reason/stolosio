@@ -44,7 +44,42 @@ deployed_capture.jsonl    691752d5e6343c0cf69be74d32910219a66e283059710503eff661
 deployed_challenge.jsonl  0abcef16ff6d2bbe60cd1b9bc8eba8f77ad5a60dbacc16b3a23ec3f5601ac5aa
 ```
 
-## Testing
+## Periplus expansion — 2026-10-03
+
+The expanded cohort contains **141 URLs**, still one per registrable domain:
+the original 111 plus **30 new domains** from Periplus MCP page feeds. The new
+cases include 25 challenges and five block pages, observed on October 1–3.
+Examples include Denmark's company registry (`datacvr.virk.dk`), Axios,
+Techmeme, Timescale, Altinity, StarTree, 36Kr, Carlyle, and Veritas Capital.
+
+- [`local_solver_expanded_urls.txt`](../data/local_solver_expanded_urls.txt): combined URL list.
+- [`local_solver_expanded_urls.tsv`](../data/local_solver_expanded_urls.tsv): combined benchmark input.
+- [`local_solver_periplus_evidence_2026-10-03.jsonl`](../data/local_solver_periplus_evidence_2026-10-03.jsonl):
+  evidence for the 30 additions, including MCP tool, request ID, capture ID,
+  observation time, failure code, HTTP status and feed read time.
+
+Read existing capture/crawl requests using `capture_list`, `crawl_list`, and
+their page feeds with `status: failed`. Only explicit `bot_challenge` or
+`bot_blocked` failures qualify. For new domains, choose the shortest observed
+public URL, then lexical order. Exclude query-bearing URLs, malformed paths
+and credential-bearing URLs; a registry HTML page was selected instead of its
+challenged document downloads. Existing domains retain their original target.
+Only observations for the selected URL are saved; alternate blocked paths are
+not additional test cases. Failure codes do not identify the protection vendor.
+
+This was a bounded search, not a complete inventory of Periplus failures:
+the listed requests comprised 43 capture requests and 28 crawls. Small failed
+feeds were read to their end; only the first 100 failed pages of each of five
+large crawls were inspected. Most of those were unsupported downloads. New
+cases came from completed small feeds. Production was read through MCP only;
+no captures, crawls, paid solves or configuration changes were initiated.
+
+The original files remain frozen so the [7.5% baseline](local-solver-baseline.md)
+continues to refer to its original cohort. The 30 additions have not yet been
+benchmarked locally. Use the expanded files for future coverage runs and report
+the original and added cohorts separately.
+
+## Running the cohorts
 
 For local-only testing, call a development capture endpoint with
 `resolve_bot_challenges: false`. Local resolution still runs automatically:
@@ -64,5 +99,6 @@ normal acquisition as a local-solver success.
 These are **historical observations, not guarantees of current protection**. Some URLs
 may now redirect, disappear, require login or payment, or behave differently by IP and
 location. One URL samples a domain; it does not establish behavior for all its pages.
-No new target requests or paid solves were made to construct this dataset, and no live
-Periplus/homelab state was queried or changed.
+No new target requests or paid solves were made to construct either cohort.
+The original cohort used local saved artifacts; the expansion used read-only
+Periplus MCP observations.
