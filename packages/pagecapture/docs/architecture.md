@@ -62,9 +62,11 @@ Wrongly accepting incomplete content (lost content) is worse than a needless ren
      response had ≥95% of the rendered content it is returned as verified exact bytes, else the rendered DOM; the
      outcome is recorded in the method cache;
    - bot challenge in the managed browser → permitted local resolution, then permitted paid challenge resolution;
-     if the plain response was usable it is kept (headless browsers are challenged where plain fetches aren't, ~7% of random pages); else `failed:
-     bot_challenge` or `bot_blocked`;
-   - still empty → `failed: incomplete_content` (or the usable plain response, kept and marked unverified).
+     if protection holds, `failed: bot_challenge` or `bot_blocked`, retaining plain HTTP as evidence;
+   - refused verification or still empty → `failed: incomplete_content`, retaining usable plain HTTP as evidence.
+     Classifier acceptance alone never proves that JS-loaded content was acquired. Required rendering without
+     capacity, a working browser or enough time retains its specific gateway failure; it cannot succeed from
+     unverified HTML. Failed verification does not populate the method cache.
 
 ## The method cache (`cache.py`)
 

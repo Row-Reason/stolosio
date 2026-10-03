@@ -90,11 +90,12 @@ def service(fetcher, managed=None, challenge=None, cache=None, local=None):
     )
 
 
-def test_usable_html_without_a_browser_is_kept_but_marked_unverified():
+def test_usable_html_without_a_browser_is_failure_evidence():
     r = run(service(FakeFetcher()))
-    assert r.outcome == "captured" and r.document.representation == "response_body"
+    assert r.outcome == "failed" and r.failure.code == "browser_unavailable"
+    assert r.document.body == ARTICLE.encode()
     assert [a.path for a in r.evidence.attempts] == ["http"] and r.evidence.cost.browser_seconds == 0
-    assert "not verified by rendering" in r.evidence.attempts[0].decision_reason
+    assert r.evidence.attempts[0].decision == "fail"
 
 
 def test_usable_html_is_rendered_by_default_and_confirmed():
@@ -111,6 +112,24 @@ def test_a_confirmed_url_skips_rendering_on_recrawl():
     run(svc)
     r = run(svc)
     assert managed.calls == 1 and r.evidence.attempts[0].decision_reason.startswith("cache: this URL")
+
+
+def test_cached_html_needs_no_browser_but_failed_canary_is_not_success():
+    cache = MemoryMethodCache()
+    run(service(FakeFetcher(), managed=FakeTier("managed", ARTICLE), cache=cache))
+    cached = run(service(FakeFetcher(), cache=cache))
+    assert cached.outcome == "captured" and cached.document.body == ARTICLE.encode()
+    assert [a.tier for a in cached.evidence.attempts] == ["direct"]
+
+    refused = FakeTier("managed", "<html><body>Forbidden</body></html>", status=403)
+    svc = service(FakeFetcher(), managed=refused, cache=cache)
+    svc.settings.canary_rate = 1.0
+    r = run(svc)
+    assert r.outcome == "failed" and r.failure.code == "incomplete_content"
+    assert "canary" in r.evidence.attempts[0].decision_reason
+    assert r.document.body == ARTICLE.encode()
+    entry = asyncio.run(cache.get(url_keys("https://example.test/page")[0]))
+    assert entry.comparisons == 1
 
 
 def test_a_pattern_skips_rendering_after_three_confirmations():
@@ -135,10 +154,10 @@ def test_render_adding_content_is_kept_and_not_cached_as_sufficient():
     assert managed.calls == 2  # no skip: plain HTTP was not enough here
 
 
-def test_browser_challenged_while_http_was_usable_keeps_http():
+def test_browser_challenged_while_http_was_usable_keeps_http_as_failure_evidence():
     r = run(service(FakeFetcher(), managed=FakeTier("managed", CHALLENGE)))
-    assert r.outcome == "captured" and r.document.representation == "response_body"
-    assert any("bot challenge" in n for n in r.evidence.attempts[0].notes)
+    assert r.outcome == "failed" and r.failure.code == "bot_challenge"
+    assert r.document.body == ARTICLE.encode()
 
 
 def test_url_keys_generalise_ids_and_slugs():
@@ -361,15 +380,66 @@ def test_a_challenge_provider_outage_stays_browser_unavailable():
     assert (r.failure.code, r.failure.retry_after_seconds) == ("browser_unavailable", None)
 
 
-def test_browser_refused_with_an_error_status_keeps_the_usable_plain_response():
+@pytest.mark.parametrize("status", [403, 429, 500])
+def test_browser_refused_with_an_error_status_keeps_plain_html_as_failure_evidence(status):
     refused = FakeTier(
         "managed",
         "<html><head><title>403 Forbidden</title></head><body><h1>403 Forbidden</h1></body></html>",
-        status=403,
+        status=status,
     )
     r = run(service(FakeFetcher(), managed=refused))
-    assert r.outcome == "captured" and r.document.representation == "response_body"
-    assert any("HTTP 403" in n for n in r.evidence.attempts[0].notes)
+    assert r.outcome == "failed" and r.failure.code == "incomplete_content" and r.failure.transient
+    assert r.document.body == ARTICLE.encode()
+    assert any(f"HTTP {status}" in n for n in r.evidence.attempts[0].notes)
+
+
+def test_search_shell_with_surrounding_text_is_not_success_when_browser_is_refused():
+    # Oikotie: substantial introductory/navigation text hides the absent JS-loaded listings from classification.
+    shell = ARTICLE.replace("</main>", '<div id="listing-results"></div><script src="/search.js"></script></main>')
+    cache = MemoryMethodCache()
+    refused = FakeTier("managed", "<html><body>Forbidden</body></html>", status=403)
+    svc = service(FakeFetcher(body=shell), managed=refused, cache=cache)
+    r = run(svc)
+    assert r.evidence.attempts[0].assessment.primary is None
+    assert r.outcome == "failed" and r.failure.code == "incomplete_content"
+    assert r.document.body == shell.encode() and r.evidence.attempts[-1].decision == "fail"
+    assert asyncio.run(cache.get(url_keys("https://example.test/page")[0])) is None
+    run(svc)
+    assert refused.calls == 2
+
+
+@pytest.mark.parametrize("code", ["capacity", "browser_unavailable", "bot_challenge"])
+def test_browser_exception_cannot_promote_unverified_html_to_success(code):
+    from pagecapture.adapters import ChallengeNotPassed
+    from pagecapture.render import BrowserCapacity
+
+    error = {
+        "capacity": BrowserCapacity("busy", retry_after_seconds=30),
+        "browser_unavailable": RuntimeError("unavailable"),
+        "bot_challenge": ChallengeNotPassed("challenge held"),
+    }[code]
+    tier = RaisingTier(error)
+    tier.tier, tier.paid = "managed", False
+    r = run(service(FakeFetcher(), managed=tier))
+    assert r.outcome == "failed" and r.failure.code == code
+    assert r.document.body == ARTICLE.encode()
+    if code == "capacity":
+        assert r.failure.retry_after_seconds == 30
+
+
+@pytest.mark.parametrize("html", ["", "<html><body></body></html>"])
+def test_empty_render_cannot_promote_unverified_html_to_success(html):
+    r = run(service(FakeFetcher(), managed=FakeTier("managed", html)))
+    assert r.outcome == "failed"
+    assert r.failure.code == ("browser_unavailable" if not html else "incomplete_content")
+    assert r.document.body == ARTICLE.encode()
+
+
+def test_insufficient_render_budget_preserves_html_as_deadline_failure():
+    svc = service(FakeFetcher(), managed=FakeTier("managed", ARTICLE))
+    r = run(svc, deadline_ms=4000)
+    assert r.outcome == "failed" and r.failure.code == "deadline_exceeded"
+    assert r.document.body == ARTICLE.encode() and svc.managed.calls == 0
 
 
 def test_renderer_restarts_a_dead_driver_once_and_retries():
@@ -443,7 +513,7 @@ def test_an_undeclared_media_type_is_sniffed_against_accept():
     unlabelled = FakeFetcher(headers=[("Server", "x")], body=b"\x89PNG binary")
     r = run(service(unlabelled), accept=HTML_ONLY)
     assert r.failure.code == "unsupported_media_type" and r.document is None
-    r = run(service(FakeFetcher(headers=[("Server", "x")])), accept=HTML_ONLY)
+    r = run(service(FakeFetcher(headers=[("Server", "x")]), managed=FakeTier("managed", ARTICLE)), accept=HTML_ONLY)
     assert r.outcome == "captured" and r.document.media_type == "text/html"
 
 

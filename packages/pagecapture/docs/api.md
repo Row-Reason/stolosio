@@ -102,9 +102,13 @@ plain HTTP ─► blocked / broken / unreachable ──────────�
   extended up to 25 seconds only when challenge progress changes,
   bounded by the remaining capture deadline; failed local acquisition can still fall back to paid resolution.
 
-- **Never downgrade.** When the browser meets a challenge, gets an error status (403, 5xx, 429), fails, or renders
-  nothing while the plain response was usable, the plain response is returned, with a note that it could not be
-  verified by rendering.
+- **Preserve evidence without claiming success.** Passing raw-HTML classification does not establish that
+  JavaScript-loaded content is present. When required browser verification meets a challenge, gets an error
+  status (403, 5xx, 429), fails, or renders nothing, the capture fails and retains the plain response as evidence.
+  A refused or empty verification render yields transient `incomplete_content`; unavailable capacity, browser
+  outages, deadlines and bot protection retain their specific failure codes. Uncached HTML without a configured
+  browser fails as `browser_unavailable`. Cache-approved HTTP captures still skip rendering, but a failed canary
+  verification is a failed capture and does not add HTTP-sufficiency evidence.
 - Rendered documents include open shadow roots (web components) as declarative shadow DOM
   (`<template shadowrootmode="open">`), which browsers and HTML parsers read back.
 

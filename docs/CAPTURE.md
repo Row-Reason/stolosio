@@ -91,6 +91,12 @@ token and URL queries redacted; failure messages carry the same summary.
 
 ## State and accounting
 
+HTML that merely passes classification still requires a trustworthy render or method-cache evidence before
+it can be accepted. If verification is refused or returns an empty page, capture fails with transient
+`incomplete_content` and retains the plain HTML as failure evidence. Browser outages, capacity limits,
+deadlines and bot protection keep their specific failure codes. Unverified HTML is never promoted to
+success because a browser attempt failed, and failed verification adds no method-cache evidence.
+
 - The method cache (`capture_method_cache`) remembers, per URL and URL pattern, where rendering
   confirmed that plain HTTP is enough. It is the only thing Stolosio learns about sites; the
   maintenance worker purges entries unseen for `CAPTURE_METHOD_CACHE_RETENTION_DAYS` (30).

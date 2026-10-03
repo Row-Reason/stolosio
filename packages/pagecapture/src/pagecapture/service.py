@@ -207,8 +207,11 @@ class CaptureService:
                 attempt.decision_reason = cached
                 return self._captured(result, http_doc)
             if self.managed is None:
-                attempt.decision_reason = "usable as classified; not verified by rendering (no browser configured)"
-                return self._captured(result, http_doc)
+                attempt.decision = "fail"
+                attempt.decision_reason = "HTML needs verification but no browser is configured"
+                result.document = http_doc
+                result.failure = failures.failure("browser_unavailable", attempt.decision_reason)
+                return self._finish(result)
             attempt.decision = "escalate"
             attempt.decision_reason = (
                 "canary: re-checking a cached HTTP-sufficient page"
@@ -345,10 +348,12 @@ class CaptureService:
         result.failure = self._bot_failure(block, attempt.decision_reason, self._resolution_attempted(result))
         return self._finish(result)
 
-    def _keep_http(self, result: CaptureResult, http_doc: Document, why: str) -> CaptureResult:
-        """The plain response was classified usable; the browser couldn't verify it. Keep it, and say so."""
+    def _unverified_http(self, result: CaptureResult, http_doc: Document, why: str) -> CaptureResult:
+        """Preserve plain HTML as evidence, never promote classifier acceptance to verified content."""
         result.evidence.attempts[0].notes.append(f"not verified by rendering: {why}")
-        return self._captured(result, http_doc)
+        result.document = http_doc
+        result.failure = failures.failure("incomplete_content", f"HTML completeness could not be verified: {why}")
+        return self._finish(result)
 
     async def _render(
         self,
@@ -362,8 +367,6 @@ class CaptureService:
         http_page=None,
     ) -> CaptureResult:
         if remaining() <= 5:
-            if http_usable:
-                return self._keep_http(result, http_doc, "no time left to render")
             result.document, result.failure = http_doc, failures.failure("deadline_exceeded", "no time left to render")
             return self._finish(result)
         render_started = time.monotonic()
@@ -391,8 +394,6 @@ class CaptureService:
             )
             if fallback is not None:
                 return fallback
-            if http_usable:
-                return self._keep_http(result, http_doc, "challenge resolution did not pass")
             result.document = http_doc
             result.failure = self._bot_failure(self._http_block(request.url, http), str(e)[:300], True)
             return self._finish(result)
@@ -415,8 +416,6 @@ class CaptureService:
             )
             if fallback is not None:
                 return fallback
-            if http_usable:
-                return self._keep_http(result, http_doc, "no browser capacity" if busy else "browser unavailable")
             result.document = http_doc
             result.failure = failures.failure(
                 "capacity" if busy else "browser_unavailable",
@@ -469,8 +468,6 @@ class CaptureService:
             )
             if fallback is not None:
                 return fallback
-            if http_usable:
-                return self._keep_http(result, http_doc, f"render failed ({rendered.error[:80]})")
             if (
                 tier.tier == "challenge_resolution"
                 and rendered.error.startswith("navigation failed")
@@ -509,23 +506,18 @@ class CaptureService:
                     http_page=http_page,
                 )
             attempt.decision = "fail"
-            if http_usable:  # plain HTTP got the page; the browser got challenged (headless browsers are, more often)
-                attempt.decision_reason = f"{what}; the plain response was usable"
-                return self._keep_http(
-                    result, http_doc, f"the browser met a {'block page' if block else 'bot challenge'}"
-                )
             attempt.decision_reason = f"{what}: {why_not}"
             # never downgrade: the plain response is better evidence than a challenge page
             result.document = http_doc
             result.failure = self._bot_failure(block, attempt.decision_reason, self._resolution_attempted(result))
             return self._finish(result)
         if primary in BROWSER_REFUSED and http_usable:
-            # plain HTTP got a usable page and the browser got an error status: the browser was refused, not the page
+            # The browser was refused. Plain HTML may still lack JS-loaded content despite passing classification.
             attempt.decision, attempt.decision_reason = (
                 "fail",
-                f"the browser got {primary} ({rendered.status}); the plain response was usable",
+                f"the browser got {primary} ({rendered.status}); plain HTML completeness is unverified",
             )
-            return self._keep_http(result, http_doc, f"the browser got HTTP {rendered.status}")
+            return self._unverified_http(result, http_doc, f"the browser got HTTP {rendered.status}")
         if primary is not None:  # the rendered page itself is a 404, login wall, block page, ...
             attempt.decision, attempt.decision_reason = "fail", f"rendered page: {primary}"
             result.document = rendered_doc
@@ -533,11 +525,10 @@ class CaptureService:
             return self._finish(result)
         if assessment.completeness == "empty":
             attempt.decision, attempt.decision_reason = "fail", "still no content after rendering"
-            # keep the plain response only if it has text of its own; an empty plain page with a small render gets
-            # the render (a small page, e.g. a QR-code login); two empty pages aren't a capture
+            # Retain plain text as failure evidence; surrounding text cannot prove JS-loaded content is present.
             plain = http_page or ParsedPage(request.url, http.as_requests())
             if http_usable and plain.words >= 5:
-                return self._keep_http(result, http_doc, "the rendered page came out empty")
+                return self._unverified_http(result, http_doc, "the rendered page came out empty")
             rendered_chars = (rendered.final_state or {}).get("chars", 0)
             if http_usable and rendered_doc is not None and rendered_chars >= 20 and not assessment.primary:
                 attempt.decision, attempt.decision_reason = (
