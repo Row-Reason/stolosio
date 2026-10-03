@@ -30,7 +30,7 @@ from . import scripts
 
 log = logging.getLogger(__name__)
 
-RENDERER_VERSION = "adaptive-5"  # bump when the algorithm changes (reported in capture evidence)
+RENDERER_VERSION = "adaptive-6"  # bump when the algorithm changes (reported in capture evidence)
 
 
 def content_lines(text: str) -> set[str]:
@@ -228,18 +228,27 @@ class _Session:
         return self.added_since(before)
 
 
-async def wait_out_challenge(page, session: _Session, cap_s: float) -> bool:
-    """A bot challenge the browser may pass (or a provider solves): wait until the real page has replaced it, before
-    any snapshot, so challenge text never counts as content. The challenge page navigates away when passed."""
+async def wait_out_challenge(page, session: _Session, cap_s: float, progress_cap_s: float | None = None) -> bool:
+    """Wait for clearance, extend only on observed progress, and stop on terminal denial."""
     start, seen = time.perf_counter(), False
     state = {"challenged": True, "ready": False}
-    while time.perf_counter() - start < cap_s:
+    limit = cap_s
+    previous_progress = None
+    while time.perf_counter() - start < limit:
         try:
             state = await page.evaluate(scripts.CHALLENGE_STATE, [list(CHALLENGE_TITLES), list(CHALLENGE_MARKUP)])
-        except Exception:  # the context is torn down while the challenge navigates to the page
+        except Exception:  # the context is torn down while the challenge navigates
             state = {"challenged": True, "ready": False}
+        if state.get("denied"):
+            session.log("challenge denied")
+            return False
         if not state["challenged"] and state["ready"]:
             break
+        progress = state.get("progress")
+        if progress_cap_s and progress is not None:
+            if previous_progress is not None and progress != previous_progress:
+                limit = min(progress_cap_s, time.perf_counter() - start + cap_s)
+            previous_progress = progress
         seen = True
         await asyncio.sleep(0.5)
     if seen:
@@ -255,12 +264,15 @@ async def adaptive_render(
     challenge_wait_s: float = 0.0,
     navigate: bool = True,
     early_dom: bool = False,
+    challenge_progress_wait_s: float | None = None,
 ) -> _Session:
     """navigate=False: the page is already there (handed over by a tier that unblocked it). early_dom: also keep the
     DOM right after the first snapshot, as a fallback for remote browsers whose pages may stop answering."""
     if navigate:
         await page.goto(url, wait_until="domcontentloaded", timeout=s.navigation_timeout_s * 1000)
-    cleared = not challenge_wait_s or await wait_out_challenge(page, session, challenge_wait_s)
+    cleared = not challenge_wait_s or await wait_out_challenge(
+        page, session, challenge_wait_s, challenge_progress_wait_s
+    )
     try:
         if cleared:
             await _explore(page, s, session, early_dom)
@@ -342,6 +354,7 @@ class Renderer:
         challenge_wait_s: float | None = None,
         intercept: bool = True,
         early_dom: bool = False,
+        challenge_progress_wait_s: float | None = None,
     ):
         """endpoint: the CDP endpoint for fresh browsers (default Settings.browser_ws; not needed when every render
         attaches to a handed-over browser). user_agent: default Settings.user_agent; None keeps the browser's own
@@ -354,6 +367,7 @@ class Renderer:
         self.user_agent = self.settings.user_agent if user_agent == "" else user_agent
         self.challenge_wait_s = self.settings.challenge_wait_s if challenge_wait_s is None else challenge_wait_s
         self.intercept, self.early_dom = intercept, early_dom
+        self.challenge_progress_wait_s = challenge_progress_wait_s
         self._pw = None
         self._restart_lock = asyncio.Lock()
 
@@ -459,7 +473,7 @@ class Renderer:
         endpoint: str | None = None,
     ) -> Rendered:
         s = self.settings
-        cap_s = s.render_cap_s + self.challenge_wait_s
+        cap_s = s.render_cap_s + (self.challenge_progress_wait_s or self.challenge_wait_s)
         cap_s = min(cap_s, deadline_s) if deadline_s else cap_s
         result = Rendered(url=url)
         t0 = time.perf_counter()
@@ -538,7 +552,14 @@ class Renderer:
             try:
                 await asyncio.wait_for(
                     adaptive_render(
-                        page, url, s, session, self.challenge_wait_s, navigate=not attach_ws, early_dom=self.early_dom
+                        page,
+                        url,
+                        s,
+                        session,
+                        self.challenge_wait_s,
+                        navigate=not attach_ws,
+                        early_dom=self.early_dom,
+                        challenge_progress_wait_s=self.challenge_progress_wait_s,
                     ),
                     timeout=cap_s,
                 )

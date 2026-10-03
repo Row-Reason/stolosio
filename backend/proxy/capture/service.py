@@ -103,10 +103,13 @@ class CaptureRunner:
                 replace(
                     self._page_settings,
                     render_cap_s=self._page_settings.local_resolution_cap_s
-                    - self._page_settings.local_resolution_wait_s,
+                    - self._page_settings.local_resolution_progress_wait_s,
+                    block_resources=(),
                 ),
                 user_agent=None,
                 challenge_wait_s=self._page_settings.local_resolution_wait_s,
+                challenge_progress_wait_s=self._page_settings.local_resolution_progress_wait_s,
+                intercept=False,
             )
         )
         self._cloud = (

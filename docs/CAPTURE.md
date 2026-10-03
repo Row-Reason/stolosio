@@ -43,8 +43,9 @@ domain, which also catches redirect hops.
 
 Bot challenges and bot block pages automatically try `local_resolution` on the capture's existing
 local fleet slot. The initial resolver is deliberately simple: a fresh browser context using the
-browser's native user agent, with up to 10 seconds for a browser-executable challenge to clear and
-20 seconds for the entire local attempt (also bounded by the capture deadline). It has no external
+browser's native user agent. Images, fonts and media are permitted, with a transfer cap;
+service workers remain blocked to preserve URL exclusions. The initial 10-second challenge wait
+extends up to 25 seconds when progress is observed, with 35 seconds for the entire local attempt (also bounded by the capture deadline). It has no external
 solver fee; local capacity and browser time still count. All local requests enforce exclusions and
 network policy, and returned content is re-assessed before acceptance.
 

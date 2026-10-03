@@ -92,12 +92,14 @@ plain HTTP ─► blocked / broken / unreachable ──────────�
   captures is rendered anyway, so the evidence keeps refreshing itself.
 - Bot protection tries **local resolution** automatically when configured: a bounded native-browser retry
   with no external solver fee. The host supplies its own local tier; the default CDP implementation waits for
-  browser-executable challenges. Local fleet time still counts as cost.
+  browser-executable challenges. Images, fonts and media are permitted under the transfer cap;
+  service workers remain blocked to preserve exclusions. Local fleet time still counts as cost.
 - If protection holds, **paid challenge resolution** is tried only when `resolve_bot_challenges` is true.
   A block page refusing the IP/fingerprint uses paid fallback only when that tier is proxied.
 - Each attempt is independently assessed; a solver result alone never means `captured`. Evidence distinguishes
   `local_resolution` from paid `challenge_resolution`, and `resolution_attempted` includes either tier.
-- Resolution tiers do not repeat. Local retries have a 20-second budget with a 10-second challenge wait,
+- Resolution tiers do not repeat. Local retries have a 35-second budget with an initial 10-second challenge wait,
+  extended up to 25 seconds only when challenge progress changes,
   bounded by the remaining capture deadline; failed local acquisition can still fall back to paid resolution.
 
 - **Never downgrade.** When the browser meets a challenge, gets an error status (403, 5xx, 429), fails, or renders

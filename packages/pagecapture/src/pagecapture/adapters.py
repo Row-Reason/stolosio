@@ -211,7 +211,9 @@ class CdpBrowserTier:
         solving = tier == "challenge_resolution"
         local = tier == "local_resolution"
         if local:
-            s = replace(s, render_cap_s=s.local_resolution_cap_s - s.local_resolution_wait_s)
+            s = replace(
+                s, block_resources=(), render_cap_s=s.local_resolution_cap_s - s.local_resolution_progress_wait_s
+            )
         self._renderer = Renderer(
             s,
             endpoint=ws_url,
@@ -219,7 +221,8 @@ class CdpBrowserTier:
             challenge_wait_s=(
                 s.local_resolution_wait_s if local else s.challenge_resolution_wait_s if solving else s.challenge_wait_s
             ),
-            intercept=not solving,
+            intercept=not (solving or local),
+            challenge_progress_wait_s=s.local_resolution_progress_wait_s if local else None,
         )
         self._started = False
 

@@ -131,3 +131,17 @@ def test_local_resolution_reports_a_persistent_challenge_without_paid_permission
     assert result["failure"]["resolution_attempted"]
     assert [a["tier"] for a in result["evidence"]["attempts"]] == ["direct", "local_resolution"]
     assert not result["evidence"]["cost"]["paid"]
+
+
+@pytest.mark.parametrize("path", ["resources", "progress"])
+def test_local_resolution_allows_resources_and_progress(local_challenge_site, path):
+    result = capture(
+        url=f"{local_challenge_site}/{path}/{uuid4().hex}", resolve_bot_challenges=False
+    )
+    assert result["outcome"] == "captured", json.dumps(result)
+    attempt = result["evidence"]["attempts"][-1]
+    assert attempt["tier"] == "local_resolution" and attempt["decision"] == "accept"
+    assert not result["evidence"]["cost"]["paid"]
+    assert "Section 11" in base64.b64decode(result["document"]["body_base64"]).decode()
+    if path == "progress":
+        assert attempt["duration_ms"] > 10000
