@@ -1,7 +1,7 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import AwareDatetime, BaseModel
 
 from backend.proxy.contracts import ProviderName
 from backend.proxy.session_queries import SessionFilters
@@ -20,12 +20,29 @@ async def list_sessions(
     search: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
     state: Annotated[str | None, Query(max_length=32)] = None,
     provider: ProviderName | None = None,
+    workload: Literal["automation", "capture"] | None = None,
+    outcome: Literal["captured", "failed", "rejected", "interrupted", "unknown", "in_progress"]
+    | None = None,
+    path: Literal["http", "managed", "local_resolution", "challenge_resolution"] | None = None,
+    since: AwareDatetime | None = None,
+    window: Literal["24h", "7d", "30d"] | None = None,
+    reason: Annotated[str | None, Query(min_length=1, max_length=64)] = None,
     before: str | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> SessionPageResponse:
     try:
         page = await request.app.state.session_queries.sessions(
-            SessionFilters(search=search, state=state, provider=provider),
+            SessionFilters(
+                search=search,
+                state=state,
+                provider=provider,
+                workload=workload,
+                outcome=outcome,
+                path=path,
+                since=since,
+                window=window,
+                reason=reason,
+            ),
             before=before,
             limit=limit,
         )

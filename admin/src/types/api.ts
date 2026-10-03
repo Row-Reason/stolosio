@@ -68,6 +68,8 @@ export type CostBucket = {
 }
 
 export type CostSession = {
+  workload: "automation" | "capture"
+  capture_hostname: string | null
   session_id: string
   client_reference: string | null
   closed_at: string | null
@@ -90,12 +92,7 @@ export type CostOverview = {
 export type ActivityProvider = "browserless" | "browserless_cloud"
 
 export type StolosioSessionState =
-  | "requested"
-  | "admitted"
-  | "open"
-  | "closing"
-  | "closed"
-  | "failed"
+  "requested" | "admitted" | "open" | "closing" | "closed" | "failed"
 
 export type SessionDomainSummary = {
   id: number
@@ -103,6 +100,18 @@ export type SessionDomainSummary = {
 }
 
 export type SessionListItem = {
+  workload: "automation" | "capture"
+  capture_hostname: string | null
+  capture: CaptureSummary | null
+  capture_outcome:
+    | "captured"
+    | "failed"
+    | "rejected"
+    | "interrupted"
+    | "unknown"
+    | "in_progress"
+    | null
+  capture_path: "http" | "managed" | "challenge_resolution" | null
   id: string
   client_reference: string | null
   state: StolosioSessionState
@@ -255,11 +264,81 @@ export type CaptureStats = {
   external_seconds: number
   mean_duration_ms: number | null
 }
-export type CaptureOverview = {
+export type AcquisitionOverview = {
   window: string
   starts_at: string
   ends_at: string
   tracking_since: string | null
   all_captures: CaptureStats
   challenged_opt_in: CaptureStats
+}
+
+export type CaptureAttempt = {
+  path: "http" | "browser"
+  tier: "direct" | "managed" | "local_resolution" | "challenge_resolution"
+  status_code?: number
+  duration_ms: number
+  assessment?: string
+  decision: "accept" | "escalate" | "fail"
+  reason:
+    | "cache_url"
+    | "cache_pattern"
+    | "canary"
+    | "verify_http"
+    | "assessment"
+    | "content_comparison"
+    | "acquisition"
+    | "media_type"
+  http_coverage?: number
+  http_sufficient?: boolean
+}
+
+export type CaptureSummary = {
+  outcome: "captured" | "failed"
+  failure_code?: string
+  failure_category?: string
+  representation?: "response_body" | "rendered_html"
+  tiers: string[]
+  duration_ms: number
+  browser_seconds: number
+  paid: boolean
+  bytes: number
+  attempts: CaptureAttempt[]
+}
+
+export type OverviewWindow = "24h" | "7d" | "30d"
+export type OutcomeBucket = {
+  at: string
+  success: number
+  failed: number
+  other: number
+}
+export type WorkloadOverview = {
+  active: number
+  counts: Record<string, number>
+  median_duration_ms: number | null
+  p95_duration_ms: number | null
+  capacity_ms: number
+  browser_ms: number
+  modeled_cost_units: number
+  series: OutcomeBucket[]
+  failures: { reason: string; count: number }[]
+}
+export type AutomationOverview = WorkloadOverview & {
+  command_count: number
+  failed_commands: number
+  interrupted_commands: number
+  mean_command_ms: number | null
+}
+export type CaptureOverview = WorkloadOverview & {
+  paths: Record<string, number>
+  browser_seconds: number
+  paid: number
+}
+export type OperationsOverview = {
+  window: OverviewWindow
+  starts_at: string
+  ends_at: string
+  automation: AutomationOverview
+  capture: CaptureOverview
 }

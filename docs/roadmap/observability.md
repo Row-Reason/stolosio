@@ -61,6 +61,7 @@ one live connection but does not invent a total order across processes.
 Registered event families are:
 
 - Session lifecycle: open, closed, and failed.
+- Capture completion: result outcome, failure codes, acquisition tiers and bounded step evidence.
 - Acquisition attempts: connected, closed, and failed.
 - CDP commands: one bounded per-attempt summary, plus individual failures and
   interruptions.
@@ -158,6 +159,44 @@ GET /v1/admin/command-costs
 
 The live endpoint uses SSE because activity delivery is one-way. JetStream stream
 sequences provide resumable cursors while PostgreSQL remains the historical source.
+
+## Operator experience
+
+The admin opens on Overview, with equal sections for automation sessions and page captures.
+Sessions and Captures have separate histories, filters, pagination and details. Capacity
+retains provider/fleet controls; Settings retains network policy and cost rates. Usage supports
+both workloads together or either one separately. Events remains a live investigation view.
+
+```text
+GET /v1/admin/overview?window=24h|7d|30d
+GET /v1/admin/sessions?workload=automation|capture&window=24h|7d|30d
+GET /v1/admin/sessions/{session_id}
+GET /v1/admin/costs/overview?window=7d&workload=automation|capture
+```
+
+Session history also accepts `search`, `state`, `provider`, `reason`, `since` (timezone-aware), `before`
+and `limit`. Capture history accepts `outcome` and `path` (`http`, `managed`,
+`challenge_resolution`). `window` selects a rolling period by completion time, or request time
+for unfinished work; it takes precedence over `since`. Overview counts terminal work by
+completion time and live capacity from unexpired leases. Charts use UTC hour/day buckets and
+include empty intervals. Each session is counted once even when it has multiple attempts.
+
+Normal automation closure describes connection lifecycle, not the caller's task success.
+Command totals and mean duration use retained attempt summaries observed in the selected
+period; internal capture commands are excluded. Mean duration is measured from aggregate
+command durations; no command latency percentiles are invented from these summaries.
+
+Captures keep their typed, redacted summary on the session alongside the transactional outbox
+event. These summaries survive event retention and are not a copy of the full capture response.
+Result outcome is independent of session lifecycle outcome. See [CAPTURE.md](../CAPTURE.md)
+for the HTTP-only denominator, privacy policy and admission accounting limits. The workload
+fields and summaries apply to newly recorded work; reset obsolete development history rather
+than interpreting prototype sessions as current capture observations.
+
+Modeled cost sums finalized attempts at their saved rates and is not an invoice. Browser
+execution, connected browser time and occupied capacity are separate measures. Cumulative CDP
+method attribution is explicitly scoped across both workloads and is independent of Usage's
+period/workload filters.
 
 ## DEBUG delivery
 

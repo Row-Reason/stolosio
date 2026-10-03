@@ -87,23 +87,37 @@ class ObservationPayload(_Payload):
 
 
 class CaptureAttemptPayload(_Payload):
+    path: Literal["http", "browser"]
     tier: Literal["direct", "managed", "local_resolution", "challenge_resolution"]
-    decision: Literal["accept", "escalate", "fail"]
-    status: int | None
+    status_code: int | None = Field(default=None, ge=100, le=599)
     duration_ms: float = Field(ge=0)
+    assessment: str | None = Field(default=None, pattern=r"^[a-z_]{1,64}$")
+    decision: Literal["accept", "escalate", "fail"]
+    reason: Literal[
+        "cache_url",
+        "cache_pattern",
+        "canary",
+        "verify_http",
+        "assessment",
+        "content_comparison",
+        "acquisition",
+        "media_type",
+    ]
+    http_coverage: float | None = Field(default=None, ge=0, le=1)
+    http_sufficient: bool | None = None
 
 
 class CapturePayload(_Payload):
-    outcome: str = Field(max_length=16)
+    outcome: Literal["captured", "failed"]
     failure_code: str | None = Field(default=None, max_length=64)
     failure_category: str | None = Field(default=None, max_length=16)
     representation: str | None = Field(default=None, max_length=16)
     tiers: list[Annotated[str, Field(max_length=32)]] = Field(max_length=8)
-    attempts: list[CaptureAttemptPayload] = Field(default_factory=list, max_length=8)
     duration_ms: int = Field(ge=0)
     browser_seconds: float = Field(ge=0)
     paid: bool
     bytes: int = Field(ge=0)
+    attempts: list[CaptureAttemptPayload] = Field(max_length=8)
 
 
 class ProviderDisconnectPayload(_Payload):

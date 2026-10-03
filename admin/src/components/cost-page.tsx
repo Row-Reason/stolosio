@@ -106,10 +106,7 @@ function Metric({
 }
 
 function CostHistory({ data }: { data: CostOverview }) {
-  const grouped = new Map<
-    string,
-    Partial<Record<ActivityProvider, number>>
-  >()
+  const grouped = new Map<string, Partial<Record<ActivityProvider, number>>>()
   for (const row of data.buckets) {
     const providers = grouped.get(row.started_at) ?? {}
     providers[row.provider] = row.modeled_cost_units
@@ -173,26 +170,18 @@ function CostHistory({ data }: { data: CostOverview }) {
         )}
       </div>
       <div className="mt-3 flex flex-wrap justify-end gap-3 text-xs text-muted-foreground">
-        {(Object.keys(providerLabels) as ActivityProvider[]).map(
-          (provider) => (
-            <span className="flex items-center gap-1.5" key={provider}>
-              <span className={`size-2 rounded-sm ${colors[provider]}`} />
-              {providerLabels[provider]}
-            </span>
-          )
-        )}
+        {(Object.keys(providerLabels) as ActivityProvider[]).map((provider) => (
+          <span className="flex items-center gap-1.5" key={provider}>
+            <span className={`size-2 rounded-sm ${colors[provider]}`} />
+            {providerLabels[provider]}
+          </span>
+        ))}
       </div>
     </div>
   )
 }
 
-function QueryError({
-  error,
-  retry,
-}: {
-  error: unknown
-  retry: () => void
-}) {
+function QueryError({ error, retry }: { error: unknown; retry: () => void }) {
   return (
     <div className="flex min-h-48 items-center justify-center p-8 text-center">
       <div>
@@ -216,11 +205,14 @@ function QueryError({
 }
 
 export function CostPage({ navigate }: CostPageProps) {
+  const [workload, setWorkload] = useState("all")
   const [window, setWindow] = useState<CostWindow>("7d")
   const overview = useQuery({
-    queryKey: ["cost-overview", window],
+    queryKey: ["cost-overview", window, workload],
     queryFn: () =>
-      apiRequest<CostOverview>(`/v1/admin/costs/overview?window=${window}`),
+      apiRequest<CostOverview>(
+        `/v1/admin/costs/overview?window=${window}${workload === "all" ? "" : `&workload=${workload}`}`
+      ),
     refetchInterval: 30_000,
   })
   const commandCosts = useQuery({
@@ -234,8 +226,7 @@ export function CostPage({ navigate }: CostPageProps) {
 
   const data = overview.data
   const attributedCommands = (commandCosts.data ?? []).filter(
-    (row) =>
-      row.attributed_cost_units > 0 || row.attributed_browser_time_ms > 0
+    (row) => row.attributed_cost_units > 0 || row.attributed_browser_time_ms > 0
   )
   const maxCommandCost = Math.max(
     1,
@@ -249,13 +240,23 @@ export function CostPage({ navigate }: CostPageProps) {
           <p className="font-mono text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
             Usage accounting
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight">Cost</h1>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight">Usage</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Modeled provider spend and bounded CDP method attribution. These
             values use the rate captured when each attempt finished.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label="Usage workload"
+            value={workload}
+            onChange={(event) => setWorkload(event.target.value)}
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+          >
+            <option value="all">Both workloads</option>
+            <option value="automation">Automation sessions</option>
+            <option value="capture">Page captures</option>
+          </select>
           <Select
             value={window}
             onValueChange={(value) => setWindow(value as CostWindow)}
@@ -314,17 +315,13 @@ export function CostPage({ navigate }: CostPageProps) {
             <Metric
               icon={Gauge}
               label="Browserless slot time"
-              value={formatMilliseconds(
-                data.totals.browserless_slot_time_ms
-              )}
+              value={formatMilliseconds(data.totals.browserless_slot_time_ms)}
               detail="Time occupying managed Browserless capacity"
             />
             <Metric
               icon={Clock3}
               label="Browser-connected"
-              value={formatMilliseconds(
-                data.totals.browser_connected_time_ms
-              )}
+              value={formatMilliseconds(data.totals.browser_connected_time_ms)}
               detail="Measured time connected to a browser"
             />
             <Metric
@@ -416,9 +413,10 @@ export function CostPage({ navigate }: CostPageProps) {
 
             <Card>
               <CardHeader className="pt-5">
-                <CardTitle>Highest-cost sessions</CardTitle>
+                <CardTitle>Highest-cost requests</CardTitle>
                 <CardDescription>
-                  Sessions ordered by finalized attempt cost.
+                  Automation sessions and captures ordered by finalized attempt
+                  cost.
                 </CardDescription>
               </CardHeader>
               <CardContent className="mt-3 px-0 pb-2">
@@ -429,12 +427,16 @@ export function CostPage({ navigate }: CostPageProps) {
                       key={session.session_id}
                       className="flex w-full items-center justify-between gap-4 border-t px-4 py-3 text-left transition-colors hover:bg-muted/40"
                       onClick={() =>
-                        navigate(`/sessions/${session.session_id}`)
+                        navigate(
+                          `/${session.workload === "capture" ? "captures" : "sessions"}/${session.session_id}`
+                        )
                       }
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">
-                          {session.client_reference ?? session.session_id}
+                          {session.capture_hostname ??
+                            session.client_reference ??
+                            `Session ${session.session_id.slice(0, 8)}`}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {session.providers
@@ -445,9 +447,7 @@ export function CostPage({ navigate }: CostPageProps) {
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <span className="text-sm font-medium tabular-nums">
-                          {numberFormatter.format(
-                            session.modeled_cost_units
-                          )}
+                          {numberFormatter.format(session.modeled_cost_units)}
                         </span>
                         <ArrowRight
                           className="size-3.5 text-muted-foreground"
@@ -474,8 +474,9 @@ export function CostPage({ navigate }: CostPageProps) {
             <Badge variant="outline">All time</Badge>
           </div>
           <CardDescription>
-            Cumulative bounded attribution. Connect, idle, disconnect, and
-            billing-minimum cost is retained as unattributed session cost.
+            Across both workloads · cumulative bounded attribution. Connect,
+            idle, disconnect, and billing-minimum cost is retained as
+            unattributed session cost.
           </CardDescription>
         </CardHeader>
         <CardContent className="mt-4 pb-5">
@@ -515,8 +516,7 @@ export function CostPage({ navigate }: CostPageProps) {
                         style={{
                           width: `${Math.max(
                             1,
-                            (row.attributed_cost_units / maxCommandCost) *
-                              100
+                            (row.attributed_cost_units / maxCommandCost) * 100
                           )}%`,
                         }}
                       />

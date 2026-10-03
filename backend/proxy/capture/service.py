@@ -3,16 +3,18 @@ import logging
 import time
 from dataclasses import replace
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 from pagecapture import BqlBrowserTier, CaptureRequest, CaptureResult, CaptureService, Exclusion
 from pagecapture import Settings as PageCaptureSettings
 from pagecapture.classify import Classifier
+from pagecapture.labels import REASONS
 from pagecapture.render import BrowserCapacity, Renderer
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.db.errors import is_transient_database_error
-from backend.db.models import CaptureResultRecord, SessionEventRecord
+from backend.db.models import CaptureResultRecord, GatewaySession, SessionEventRecord
 from backend.events.registry import EventType, validate_payload
 from backend.metrics.definitions import (
     CAPTURE_BROWSER_SECONDS,
@@ -42,6 +44,54 @@ from backend.proxy.sessions import SessionAdmission, SessionLease
 from backend.settings import Settings
 
 logger = logging.getLogger(__name__)
+
+
+def capture_hostname(url: str) -> str | None:
+    try:
+        hostname = (urlsplit(url).hostname or "").encode("idna").decode().lower()
+    except UnicodeError:
+        return None
+    return hostname if len(hostname) <= 253 else None
+
+
+def capture_attempts(result: CaptureResult) -> list[dict[str, object]]:
+    """Persist bounded facts, never free-text decisions, cache keys, URLs or renderer notes."""
+    summaries = []
+    for attempt in result.evidence.attempts:
+        reason = "acquisition"
+        text = attempt.decision_reason
+        if text.startswith("cache: this URL"):
+            reason = "cache_url"
+        elif text.startswith("cache: pattern"):
+            reason = "cache_pattern"
+        elif text.startswith("canary:"):
+            reason = "canary"
+        elif attempt.comparison is not None:
+            reason = "content_comparison"
+        elif attempt.assessment.primary in REASONS:
+            reason = "assessment"
+        elif text.startswith("XML (") or text.startswith("not HTML ("):
+            reason = "media_type"
+        elif attempt.decision == "escalate" and attempt.tier == "direct":
+            reason = "verify_http"
+        comparison = attempt.comparison or {}
+        summaries.append(
+            {
+                "path": attempt.path,
+                "tier": attempt.tier,
+                "status_code": attempt.status_code,
+                "duration_ms": attempt.duration_ms,
+                "assessment": (
+                    attempt.assessment.primary if attempt.assessment.primary in REASONS else None
+                ),
+                "decision": attempt.decision,
+                "reason": reason,
+                "http_coverage": comparison.get("http_coverage"),
+                "http_sufficient": comparison.get("http_sufficient"),
+            }
+        )
+    return summaries
+
 
 # Admission may use the deadline, but only while this much of it is left for the capture itself.
 MIN_CAPTURE_SECONDS = 10.0
@@ -162,7 +212,9 @@ class CaptureRunner:
             session = await self._sessions.admit(
                 RequestedSessionSettings(
                     overrides={"stolosio.provider.slug": ProviderName.BROWSERLESS}
-                )
+                ),
+                workload="capture",
+                capture_hostname=capture_hostname(request.url),
             )
         except GatewayCapacityFull as error:
             raise self._unavailable(error.reason) from error
@@ -289,22 +341,20 @@ class CaptureRunner:
                 "failure_category": failure.category if failure else None,
                 "representation": result.document.representation if result.document else None,
                 "tiers": tiers,
-                "attempts": [
-                    {
-                        "tier": a.tier,
-                        "decision": a.decision,
-                        "status": a.status_code,
-                        "duration_ms": a.duration_ms,
-                    }
-                    for a in result.evidence.attempts
-                ],
                 "duration_ms": duration_ms,
                 "browser_seconds": cost.browser_seconds,
                 "paid": cost.paid,
                 "bytes": cost.bytes,
+                "attempts": capture_attempts(result),
             },
         )
         async with self._database_sessions.begin() as database:
+            row = await database.get(
+                GatewaySession, session.session.session_id, with_for_update=True
+            )
+            if row is None or row.capture_summary is not None:
+                return
+            row.capture_summary = payload
             recorded_at = datetime.now(UTC)
             inserted = await database.scalar(
                 insert(CaptureResultRecord)
@@ -329,7 +379,7 @@ class CaptureRunner:
                 )
             )
 
-        CAPTURES.labels(result.outcome, failure.category if failure else "none").inc()
+        CAPTURES.labels(result.outcome, failure.category if failure else "none", last_tier).inc()
         CAPTURE_DURATION.labels(last_tier).observe(duration_ms / 1000)
         for attempt in result.evidence.attempts:
             if attempt.path == "browser":

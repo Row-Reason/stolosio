@@ -197,9 +197,7 @@ async def test_activity_stream_reports_an_expired_resume_cursor() -> None:
 async def test_activity_stream_reports_a_cursor_from_a_replaced_stream() -> None:
     class FakeJetStream:
         async def stream_info(self, stream):
-            return SimpleNamespace(
-                state=SimpleNamespace(messages=10, first_seq=1, last_seq=10)
-            )
+            return SimpleNamespace(state=SimpleNamespace(messages=10, first_seq=1, last_seq=10))
 
     class FakeClient:
         def jetstream(self):
@@ -234,3 +232,38 @@ def test_activity_filters_match_registered_event_contract() -> None:
     assert not ActivityEventFilters(
         providers=(ProviderName.BROWSERLESS,),
     ).matches(event)
+
+
+@pytest.mark.asyncio
+async def test_capture_events_have_a_family_and_payload_based_outcomes(database_sessions):
+    from backend.debug.activity import activity_event_dict
+
+    events = [
+        SessionEvent.create(
+            EventType.CAPTURE_COMPLETED,
+            uuid4(),
+            payload={
+                "outcome": outcome,
+                "tiers": ["direct"],
+                "duration_ms": 10,
+                "browser_seconds": 0,
+                "paid": False,
+                "bytes": 0,
+                "attempts": [],
+            },
+        )
+        for outcome in ("captured", "failed")
+    ]
+    await _record_events(database_sessions, *events)
+    history = ActivityHistoryService(database_sessions)
+    for event, outcome in zip(
+        events, (ActivityEventOutcome.SUCCESS, ActivityEventOutcome.FAILURE), strict=True
+    ):
+        filters = ActivityEventFilters(families=(ActivityEventFamily.CAPTURE,), outcomes=(outcome,))
+        assert filters.matches(event)
+        assert not filters.matches(events[1] if event == events[0] else events[0])
+        encoded = activity_event_dict(event)
+        assert encoded["event_family"] == "capture"
+        assert encoded["outcome"] == outcome.value
+        page = await history.events(filters)
+        assert [row["event_id"] for row in page.events] == [str(event.event_id)]

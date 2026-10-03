@@ -53,3 +53,27 @@ def test_session_routes_report_missing_sessions_and_invalid_cursors() -> None:
     response = client.get("/v1/admin/sessions", params={"before": "bad"})
     assert response.status_code == 422
     assert response.json()["detail"] == "invalid sessions cursor"
+
+
+def test_session_routes_validate_workload_and_time_filters():
+    app = FastAPI()
+    queries = FakeSessionQueries()
+    app.state.session_queries = queries
+    app.include_router(router)
+    client = TestClient(app)
+    response = client.get(
+        "/v1/admin/sessions",
+        params={
+            "workload": "capture",
+            "window": "24h",
+            "outcome": "captured",
+            "path": "http",
+        },
+    )
+    assert response.status_code == 200
+    assert queries.filters.workload == "capture"
+    assert queries.filters.window == "24h"
+    assert queries.filters.outcome == "captured"
+    assert queries.filters.path == "http"
+    assert client.get("/v1/admin/sessions?workload=unknown").status_code == 422
+    assert client.get("/v1/admin/sessions?since=2026-10-01T12:00:00").status_code == 422

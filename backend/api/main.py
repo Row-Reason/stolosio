@@ -14,6 +14,7 @@ from backend.api.routes.admin_costs import router as admin_costs_router
 from backend.api.routes.admin_events import router as admin_events_router
 from backend.api.routes.admin_fleets import router as admin_fleets_router
 from backend.api.routes.admin_network import router as admin_network_router
+from backend.api.routes.admin_overview import router as admin_overview_router
 from backend.api.routes.admin_provider_capacity import router as admin_provider_capacity_router
 from backend.api.routes.admin_sessions import router as admin_sessions_router
 from backend.api.routes.capture import router as capture_router
@@ -51,6 +52,7 @@ from backend.proxy.postgres import (
 )
 from backend.proxy.session_queries import SessionQueryService
 from backend.proxy.sessions import SessionAdmission
+from backend.proxy.workload_queries import WorkloadQueryService
 from backend.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -204,6 +206,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         event_publisher,
         network_policy=network_policy,
     )
+    app.state.workload_queries = WorkloadQueryService(session_factory)
     app.state.capture = CaptureRunner(
         sessions,
         attempts,
@@ -231,6 +234,7 @@ app.include_router(admin_fleets_router)
 app.include_router(admin_network_router)
 app.include_router(admin_provider_capacity_router)
 app.include_router(admin_sessions_router)
+app.include_router(admin_overview_router)
 app.include_router(capture_router)
 app.include_router(health_router)
 app.include_router(debug_router)

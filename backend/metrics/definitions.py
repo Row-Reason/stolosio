@@ -174,7 +174,7 @@ RETENTION_DURATION = Histogram(
 CAPTURES = Counter(
     "stolosio_captures_total",
     "Finished captures by outcome and failure category (none when captured).",
-    ("outcome", "category"),
+    ("outcome", "category", "tier"),
     registry=REGISTRY,
 )
 CAPTURE_REJECTED = Counter(

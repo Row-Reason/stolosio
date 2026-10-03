@@ -24,6 +24,6 @@ A session connects to the provider named by `stolosio.provider.slug`, or `browse
 
 ## Paid capacity and spend
 
-Browserless cloud requires a configured token as well as enabled quota. Every attempt is charged its capacity-occupied time at its provider's rate, which operators set on the admin Policy page.
+Browserless cloud requires a configured token as well as enabled quota. Every attempt is charged its capacity-occupied time at its provider's rate, which operators set on the admin Settings page.
 
 See [client settings](/docs/clients/) and the detailed [provider contract](https://github.com/elei-io/stolosio/blob/main/docs/PROVIDERS.md).

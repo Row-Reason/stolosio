@@ -5,7 +5,11 @@ description: Inspect sessions, understand DEBUG observations, and diagnose deplo
 
 ## Start with the admin interface
 
-Inspect the affected session and its acquisition attempts. Check provider selection, queue pressure, fleet readiness, recorded failures, and the activity feed. Cost and timing displays are modeled observations, not provider invoices.
+Overview gives browser automation and page capture equal prominence. Use Sessions to inspect CDP connections, command outcomes, and provider attempts. Use Captures to inspect HTTP-only completions, local rendering, challenge resolution, failure codes, and acquisition timelines. Both histories support filtering and pagination.
+
+HTTP-only counts pages acquired without a browser attempt, as a share of successful captures. A browser render that verifies the original HTTP response still counts as browser use. HTTP-only captures also reserve local browser capacity, so browser execution and occupied capacity are shown separately.
+
+Capacity shows queue pressure and fleet readiness. Settings manages policy and rates. Usage can show both workloads or either one separately; its costs are modeled observations, not provider invoices. Events provides the retained and live activity feed for deeper investigation. Normal session closure describes the connection rather than the success of the caller’s automation task.
 
 DEBUG events describe what happened. They do not diagnose a challenge, prescribe another provider, or recommend IP rotation.
 

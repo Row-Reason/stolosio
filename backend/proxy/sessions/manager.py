@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import replace
+from typing import Literal
 from uuid import UUID, uuid4
 
 from backend.proxy.contracts import (
@@ -75,12 +76,20 @@ class SessionAdmission:
         self._settings = settings
         self._owner_id = owner_id or str(uuid4())
 
-    async def admit(self, requested: RequestedSessionSettings) -> SessionLease:
+    async def admit(
+        self,
+        requested: RequestedSessionSettings,
+        *,
+        workload: Literal["automation", "capture"] = "automation",
+        capture_hostname: str | None = None,
+    ) -> SessionLease:
         session = StolosioSession(
             session_id=str(uuid4()),
             owner_id=self._owner_id,
             lease_token=str(uuid4()),
             state=SessionState.REQUESTED,
+            workload=workload,
+            capture_hostname=capture_hostname,
         )
         requested_settings = {
             field: str(value) if isinstance(value, UUID) else value

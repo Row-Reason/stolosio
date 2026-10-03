@@ -95,14 +95,29 @@ token and URL queries redacted; failure messages carry the same summary.
   confirmed that plain HTTP is enough. It is the only thing Stolosio learns about sites; the
   maintenance worker purges entries unseen for `CAPTURE_METHOD_CACHE_RETENTION_DAYS` (30).
 - Every capture writes a `capture.completed` outbox event: outcome, failure code and category,
-  tiers used, per-attempt tier/decision/status/duration (no URLs or page data), total duration, browser
-  seconds, whether a paid tier was used, bytes.
-
+  tiers used, duration, browser seconds, whether a paid tier was used, bytes, and bounded
+  acquisition steps (tier, status, assessment code, decision, cache/verification reason, HTTP
+  coverage). Free-text decisions, URL cache keys, renderer notes and page data are not retained.
+  The summary is saved on the capture session in the same transaction as its outbox event.
 - A failed capture logs a warning with its failure code, category, transience and session id;
   never the URL or the failure message, which may carry credentials.
-- Metrics: `stolosio_captures_total{outcome,category}`, `stolosio_capture_rejected_total{reason}`,
+- Metrics: `stolosio_captures_total{outcome,category,tier}`, `stolosio_capture_rejected_total{reason}`,
   `stolosio_capture_duration_seconds{tier}`, `stolosio_capture_browser_seconds_total{tier}`,
   `stolosio_capture_paid_total`.
+
+## Operator views
+
+Overview gives automation sessions and captures equal prominence. Captures has its own
+searchable, paginated history and acquisition timeline. HTTP-only means no browser tier was
+attempted; a render which verifies HTTP sufficiency still counts as browser use even when the
+result returns `response_body`. The HTTP-only share uses successfully captured pages as its
+denominator. Failure, admission rejection, interruption and unavailable-result states are
+separate. Rejections before a database transaction commits (including exhausted database
+conflicts) are observable through counters, not durable session history.
+
+Capture summaries follow terminal-session retention, independently of event-feed retention.
+They expose only the requested hostname, never raw URLs, query values, arbitrary caller
+references, headers or documents. No per-site performance claims are inferred from failures.
 
 ## Acquisition analytics
 

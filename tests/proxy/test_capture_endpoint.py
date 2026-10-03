@@ -2,6 +2,7 @@
 exclusions, paid challenge resolution behind its own provider limit, and accounting."""
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -213,11 +214,32 @@ async def test_a_capture_holds_one_local_slot_until_it_answers(runner, database_
         )
         cached = list(await database.scalars(select(CaptureMethodCacheEntry.key)))
     assert session.state == "closed"
+    assert session.workload == "capture"
+    assert session.capture_hostname == "example.test"
     [completed] = [e for e in events if e.event_type == "capture.completed"]
     assert completed.payload["outcome"] == "captured"
     assert completed.payload["tiers"] == ["direct", "managed"]
+    assert session.capture_summary == completed.payload
+    assert completed.payload["attempts"][0]["reason"] == "verify_http"
+    assert completed.payload["attempts"][1]["http_sufficient"] is True
     assert completed.published_at is None  # an outbox row like every lifecycle event
     assert sorted(k.split(":")[0] for k in cached) == ["pattern", "url"]
+
+    # Recording the same terminal result again must not duplicate its outbox event.
+    await runner._record(
+        SimpleNamespace(session=SimpleNamespace(session_id=session.id)), result, 9999, False
+    )
+    async with database_sessions() as database:
+        repeated = list(
+            await database.scalars(
+                select(SessionEventRecord).where(
+                    SessionEventRecord.event_type == "capture.completed"
+                )
+            )
+        )
+        row = await database.get(GatewaySession, session.id)
+    assert len(repeated) == 1
+    assert row.capture_summary == completed.payload
 
 
 @pytest.mark.asyncio
@@ -380,8 +402,12 @@ async def test_local_resolution_reuses_the_slot_and_reports_to_the_outbox(
     assert completed.payload["attempts"][-1] == {
         "tier": "local_resolution",
         "decision": "accept",
-        "status": 200,
+        "path": "browser",
+        "status_code": 200,
         "duration_ms": 2000.0,
+        "reason": "content_comparison",
+        "http_coverage": 0.0,
+        "http_sufficient": False,
     }
     assert completed.payload["browser_seconds"] == 2.0 and not completed.payload["paid"]
     assert "example.test" not in str(completed.payload)

@@ -39,6 +39,8 @@ class CostBucketResponse(BaseModel):
 
 
 class CostSessionResponse(BaseModel):
+    workload: Literal["automation", "capture"]
+    capture_hostname: str | None
     session_id: str
     client_reference: str | None
     closed_at: str | None
@@ -62,8 +64,9 @@ class CostOverviewResponse(BaseModel):
 async def cost_overview(
     request: Request,
     window: Literal["24h", "7d", "30d", "90d"] = Query(default="7d"),
+    workload: Literal["automation", "capture"] | None = None,
 ) -> CostOverviewResponse:
-    value = await request.app.state.costs.overview(window)
+    value = await request.app.state.costs.overview(window, workload=workload)
     return CostOverviewResponse.model_validate(value)
 
 
