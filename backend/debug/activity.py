@@ -30,7 +30,7 @@ class ActivityEventFamily(StrEnum):
     CONSOLE = "console"
     JAVASCRIPT = "javascript"
     PROVIDER = "provider"
-    EXECUTION = "execution"
+    CAPTURE = "capture"
 
 
 class ActivityEventOutcome(StrEnum):
@@ -80,7 +80,7 @@ class ActivityEventFilters:
             return False
         if self.event_types and event_type not in self.event_types:
             return False
-        if self.outcomes and activity_event_outcome(event_type) not in self.outcomes:
+        if self.outcomes and activity_event_outcome(event_type, event.payload) not in self.outcomes:
             return False
         if self.session_id is not None and event.session_id != self.session_id:
             return False
@@ -101,7 +101,15 @@ def activity_event_family(event_type: EventType) -> ActivityEventFamily:
     return ActivityEventFamily(event_type.value.partition(".")[0])
 
 
-def activity_event_outcome(event_type: EventType) -> ActivityEventOutcome | None:
+def activity_event_outcome(
+    event_type: EventType, payload: dict | None = None
+) -> ActivityEventOutcome | None:
+    if event_type == EventType.CAPTURE_COMPLETED and payload:
+        return (
+            ActivityEventOutcome.SUCCESS
+            if payload["outcome"] == "captured"
+            else ActivityEventOutcome.FAILURE
+        )
     for outcome, event_types in _OUTCOME_TYPES.items():
         if event_type in event_types:
             return outcome
@@ -110,7 +118,7 @@ def activity_event_outcome(event_type: EventType) -> ActivityEventOutcome | None
 
 def activity_event_dict(event: SessionEvent) -> dict[str, object]:
     event_type = EventType(event.event_type)
-    outcome = activity_event_outcome(event_type)
+    outcome = activity_event_outcome(event_type, event.payload)
     return {
         "event_id": str(event.event_id),
         "schema_version": event.schema_version,
@@ -205,7 +213,18 @@ class ActivityHistoryService:
                 for outcome in filters.outcomes
                 for event_type in _OUTCOME_TYPES[outcome]
             }
-            query = query.where(SessionEventRecord.event_type.in_(outcome_types))
+            capture_outcomes = []
+            if ActivityEventOutcome.SUCCESS in filters.outcomes:
+                capture_outcomes.append("captured")
+            if ActivityEventOutcome.FAILURE in filters.outcomes:
+                capture_outcomes.append("failed")
+            query = query.where(
+                or_(
+                    SessionEventRecord.event_type.in_(outcome_types),
+                    (SessionEventRecord.event_type == EventType.CAPTURE_COMPLETED.value)
+                    & SessionEventRecord.payload["outcome"].as_string().in_(capture_outcomes),
+                )
+            )
         if filters.session_id is not None:
             query = query.where(SessionEventRecord.session_id == str(filters.session_id))
         if filters.attempt_id is not None:

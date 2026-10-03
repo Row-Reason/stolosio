@@ -188,6 +188,11 @@ class GatewaySession(Base):
     lease_token: Mapped[str] = mapped_column(String(36), nullable=False)
     client_reference: Mapped[str | None] = mapped_column(String(36))
     requested_settings: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    workload: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="automation", server_default="automation", index=True
+    )
+    capture_hostname: Mapped[str | None] = mapped_column(String(253))
+    capture_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     state: Mapped[str] = mapped_column(String(32), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

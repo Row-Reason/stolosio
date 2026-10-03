@@ -5,6 +5,7 @@ import {
   CircleDot,
   Coins,
   Gauge,
+  FileText,
   Menu,
   Moon,
   ShieldCheck,
@@ -14,8 +15,8 @@ import {
 import { type ComponentType, useEffect, useState } from "react"
 
 import { useTheme } from "@/components/theme-provider"
-import { ActivityPage } from "@/components/activity-page"
 import { CapturesPage } from "@/components/captures-page"
+import { ActivityPage } from "@/components/activity-page"
 import { CostPage } from "@/components/cost-page"
 import { FleetsPage } from "@/components/fleets-page"
 import { OverviewPage } from "@/components/overview-page"
@@ -39,12 +40,6 @@ const navigationItems: NavigationItem[] = [
     description: "Gateway health, demand, and capacity at a glance.",
   },
   {
-    label: "Activity",
-    href: "/activity",
-    icon: Activity,
-    description: "A live, filtered stream of events across Stolosio sessions.",
-  },
-  {
     label: "Sessions",
     href: "/sessions",
     icon: CircleDot,
@@ -53,58 +48,38 @@ const navigationItems: NavigationItem[] = [
   {
     label: "Captures",
     href: "/captures",
-    icon: ShieldCheck,
-    description: "Acquisition outcomes and challenge resolution.",
+    icon: FileText,
+    description: "Page acquisition outcomes and evidence.",
   },
   {
-    label: "Cost",
+    label: "Usage",
     href: "/cost",
     icon: Coins,
     description: "Provider usage, modeled spend, and CDP action attribution.",
   },
   {
-    label: "Fleets",
+    label: "Capacity",
     href: "/fleets",
     icon: Boxes,
     description: "Provider capacity, instances, queues, and scaling policy.",
   },
   {
-    label: "Policy",
+    label: "Settings",
     href: "/policy",
     icon: ShieldCheck,
     description: "Global request blocking and provider cost rates.",
+  },
+  {
+    label: "Events",
+    href: "/activity",
+    icon: Activity,
+    description: "A live, filtered stream of events across Stolosio sessions.",
   },
 ]
 
 function getPathname() {
   const pathname = window.location.pathname.replace(/\/$/, "") || "/"
-  return pathname === "/" ? "/activity" : pathname
-}
-
-function StubPage({ item }: { item: NavigationItem }) {
-  const Icon = item.icon
-
-  return (
-    <main className="mx-auto flex min-h-svh w-full max-w-7xl items-center px-6 py-20 lg:px-10">
-      <section className="max-w-xl">
-        <span className="mb-6 flex size-11 items-center justify-center rounded-lg border bg-card shadow-sm">
-          <Icon className="size-5 text-muted-foreground" aria-hidden />
-        </span>
-        <p className="mb-3 font-mono text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-          Stolosio console
-        </p>
-        <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
-          {item.label}
-        </h1>
-        <p className="mt-4 text-base leading-7 text-muted-foreground">
-          {item.description}
-        </p>
-        <div className="mt-8 inline-flex items-center rounded-full border bg-muted/40 px-3 py-1.5 text-xs font-medium text-muted-foreground">
-          Planned workspace
-        </div>
-      </section>
-    </main>
-  )
+  return pathname === "/" ? "/overview" : pathname
 }
 
 export default function App() {
@@ -114,7 +89,7 @@ export default function App() {
 
   useEffect(() => {
     if (window.location.pathname === "/") {
-      window.history.replaceState({}, "", "/activity")
+      window.history.replaceState({}, "", "/overview")
     }
 
     const handlePopState = () => setPathname(getPathname())
@@ -125,7 +100,7 @@ export default function App() {
   const navigate = (href: string) => {
     if (href !== pathname) {
       window.history.pushState({}, "", href)
-      setPathname(href)
+      setPathname(new URL(href, window.location.origin).pathname)
     }
     setSidebarOpen(false)
   }
@@ -133,9 +108,12 @@ export default function App() {
   const activeItem =
     navigationItems.find(
       ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
-    ) ?? navigationItems[1]
+    ) ?? navigationItems[0]
   const fleetProvider = pathname.startsWith("/fleets/")
     ? pathname.slice("/fleets/".length)
+    : undefined
+  const captureId = pathname.startsWith("/captures/")
+    ? pathname.slice("/captures/".length)
     : undefined
   const sessionId = pathname.startsWith("/sessions/")
     ? pathname.slice("/sessions/".length)
@@ -161,11 +139,11 @@ export default function App() {
       >
         <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
           <a
-            href="/activity"
+            href="/overview"
             className="flex items-center gap-2.5 font-semibold tracking-tight"
             onClick={(event) => {
               event.preventDefault()
-              navigate("/activity")
+              navigate("/overview")
             }}
           >
             <span className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
@@ -257,12 +235,10 @@ export default function App() {
         ) : activeItem.href === "/sessions" ? (
           <SessionsPage sessionId={sessionId} navigate={navigate} />
         ) : activeItem.href === "/captures" ? (
-          <CapturesPage />
+          <CapturesPage sessionId={captureId} navigate={navigate} />
         ) : activeItem.href === "/cost" ? (
           <CostPage navigate={navigate} />
-        ) : (
-          <StubPage item={activeItem} />
-        )}
+        ) : null}
       </div>
     </div>
   )

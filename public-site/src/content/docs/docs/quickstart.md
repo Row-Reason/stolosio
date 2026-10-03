@@ -34,7 +34,7 @@ Keep this process running. The API and fleet controller are separate processes: 
 
 Visit [localhost:5173](http://localhost:5173). The API listens on `http://localhost:8411`; the Docker fleet controller exposes metrics at `http://localhost:9101/metrics`.
 
-Inspect fleet policy, provider availability, and sessions in the admin interface. Fleet limits, cost rates, and the domain blocklist are saved in PostgreSQL, not configured through session URLs.
+Open Overview for automation and capture outcomes, then use Sessions or Captures for request details. Capacity shows fleet policy and provider availability. Fleet limits, cost rates, and the domain blocklist are saved in PostgreSQL, not configured through session URLs.
 
 ## 4. Run the example client
 

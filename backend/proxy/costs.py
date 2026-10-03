@@ -34,7 +34,7 @@ class CostQueryService:
     def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
         self._sessions = sessions
 
-    async def overview(self, window_key: str) -> dict[str, object]:
+    async def overview(self, window_key: str, *, workload: str | None = None) -> dict[str, object]:
         window = COST_WINDOWS.get(window_key)
         if window is None:
             raise ValueError("invalid cost window")
@@ -45,6 +45,12 @@ class CostQueryService:
             AcquisitionAttempt.finished_at >= starts_at,
             AcquisitionAttempt.finished_at <= ends_at,
         )
+        if workload is not None:
+            filters += (
+                AcquisitionAttempt.session_id.in_(
+                    select(GatewaySession.id).where(GatewaySession.workload == workload)
+                ),
+            )
 
         async with self._sessions() as database:
             provider_rows = list(
@@ -58,39 +64,27 @@ class CostQueryService:
                                 (AcquisitionAttempt.state == "failed", 1),
                             )
                         ),
-                        func.coalesce(
-                            func.sum(AcquisitionAttempt.modeled_cost_units), 0
-                        ),
-                        func.coalesce(
-                            func.sum(AcquisitionAttempt.chargeable_time_ms), 0
-                        ),
-                        func.coalesce(
-                            func.sum(AcquisitionAttempt.browser_connected_ms), 0
-                        ),
-                        func.coalesce(
-                            func.sum(AcquisitionAttempt.capacity_occupied_ms), 0
-                        ),
+                        func.coalesce(func.sum(AcquisitionAttempt.modeled_cost_units), 0),
+                        func.coalesce(func.sum(AcquisitionAttempt.chargeable_time_ms), 0),
+                        func.coalesce(func.sum(AcquisitionAttempt.browser_connected_ms), 0),
+                        func.coalesce(func.sum(AcquisitionAttempt.capacity_occupied_ms), 0),
                     )
                     .where(*filters)
                     .group_by(AcquisitionAttempt.provider)
                     .order_by(AcquisitionAttempt.provider)
                 )
             )
-            bucket_start = func.date_trunc(
-                window.bucket, AcquisitionAttempt.finished_at
-            ).label("bucket_start")
+            bucket_start = func.date_trunc(window.bucket, AcquisitionAttempt.finished_at).label(
+                "bucket_start"
+            )
             bucket_rows = list(
                 await database.execute(
                     select(
                         bucket_start,
                         AcquisitionAttempt.provider,
                         func.count(AcquisitionAttempt.id),
-                        func.coalesce(
-                            func.sum(AcquisitionAttempt.modeled_cost_units), 0
-                        ),
-                        func.coalesce(
-                            func.sum(AcquisitionAttempt.chargeable_time_ms), 0
-                        ),
+                        func.coalesce(func.sum(AcquisitionAttempt.modeled_cost_units), 0),
+                        func.coalesce(func.sum(AcquisitionAttempt.chargeable_time_ms), 0),
                     )
                     .where(*filters)
                     .group_by(bucket_start, AcquisitionAttempt.provider)
@@ -111,15 +105,15 @@ class CostQueryService:
                         AcquisitionAttempt.session_id,
                         GatewaySession.client_reference,
                         GatewaySession.closed_at,
-                        func.array_agg(
-                            distinct(AcquisitionAttempt.provider)
-                        ).label("providers"),
-                        func.coalesce(
-                            func.sum(AcquisitionAttempt.modeled_cost_units), 0
-                        ).label("modeled_cost_units"),
-                        func.coalesce(
-                            func.sum(AcquisitionAttempt.chargeable_time_ms), 0
-                        ).label("chargeable_time_ms"),
+                        GatewaySession.workload,
+                        GatewaySession.capture_hostname,
+                        func.array_agg(distinct(AcquisitionAttempt.provider)).label("providers"),
+                        func.coalesce(func.sum(AcquisitionAttempt.modeled_cost_units), 0).label(
+                            "modeled_cost_units"
+                        ),
+                        func.coalesce(func.sum(AcquisitionAttempt.chargeable_time_ms), 0).label(
+                            "chargeable_time_ms"
+                        ),
                     )
                     .join(
                         GatewaySession,
@@ -130,11 +124,11 @@ class CostQueryService:
                         AcquisitionAttempt.session_id,
                         GatewaySession.client_reference,
                         GatewaySession.closed_at,
+                        GatewaySession.workload,
+                        GatewaySession.capture_hostname,
                     )
                     .order_by(
-                        func.sum(
-                            AcquisitionAttempt.modeled_cost_units
-                        ).desc().nullslast(),
+                        func.sum(AcquisitionAttempt.modeled_cost_units).desc().nullslast(),
                         GatewaySession.closed_at.desc().nullslast(),
                     )
                     .limit(10)
@@ -166,15 +160,9 @@ class CostQueryService:
         totals = {
             "session_count": int(session_count),
             "attempt_count": sum(int(row["attempt_count"]) for row in providers),
-            "failed_attempt_count": sum(
-                int(row["failed_attempt_count"]) for row in providers
-            ),
-            "modeled_cost_units": sum(
-                int(row["modeled_cost_units"]) for row in providers
-            ),
-            "chargeable_time_ms": sum(
-                int(row["chargeable_time_ms"]) for row in providers
-            ),
+            "failed_attempt_count": sum(int(row["failed_attempt_count"]) for row in providers),
+            "modeled_cost_units": sum(int(row["modeled_cost_units"]) for row in providers),
+            "chargeable_time_ms": sum(int(row["chargeable_time_ms"]) for row in providers),
             "browser_connected_time_ms": sum(
                 int(row["browser_connected_time_ms"]) for row in providers
             ),
@@ -212,6 +200,8 @@ class CostQueryService:
                     "session_id": session_id,
                     "client_reference": client_reference,
                     "closed_at": _iso(closed_at),
+                    "workload": workload,
+                    "capture_hostname": capture_hostname,
                     "providers": sorted(providers),
                     "modeled_cost_units": int(modeled_cost_units),
                     "chargeable_time_ms": int(chargeable_time_ms),
@@ -220,6 +210,8 @@ class CostQueryService:
                     session_id,
                     client_reference,
                     closed_at,
+                    workload,
+                    capture_hostname,
                     providers,
                     modeled_cost_units,
                     chargeable_time_ms,

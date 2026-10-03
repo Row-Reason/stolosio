@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,6 +13,15 @@ import {
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
+import { CaptureDetailView } from "@/components/captures-page"
+import { Metric, WindowPicker } from "@/components/observability"
+import {
+  duration,
+  number,
+  percent,
+  plural,
+  useOverview,
+} from "@/lib/observability"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,9 +34,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { extractApiError } from "@/lib/api"
-import { summarizeCommandMethods } from "@/lib/events"
+import { eventTitle, summarizeCommandMethods } from "@/lib/events"
 import { cn } from "@/lib/utils"
 import type {
+  OverviewWindow,
   ActivityEvent,
   ActivityEventPage,
   ActivityProvider,
@@ -59,19 +69,11 @@ function formatDate(value: string | null) {
 }
 
 function formatDuration(seconds: number | null) {
-  if (seconds === null) return "In progress"
-  if (seconds < 1) return "<1s"
-  if (seconds < 60) return `${Math.round(seconds)}s`
-  const roundedSeconds = Math.round(seconds)
-  const minutes = Math.floor(roundedSeconds / 60)
-  const remainder = roundedSeconds % 60
-  return `${minutes}m ${remainder}s`
+  return seconds === null ? "In progress" : duration(seconds * 1000)
 }
 
 function formatMilliseconds(milliseconds: number | null) {
-  if (milliseconds === null) return "—"
-  if (milliseconds < 1_000) return `${milliseconds}ms`
-  return formatDuration(milliseconds / 1_000)
+  return duration(milliseconds)
 }
 
 function humanize(value: string | null) {
@@ -118,10 +120,26 @@ function ProviderPath({ providers }: { providers: ActivityProvider[] }) {
 }
 
 function SessionList({ navigate }: { navigate: (href: string) => void }) {
-  const [searchInput, setSearchInput] = useState("")
-  const [search, setSearch] = useState("")
-  const [state, setState] = useState("all")
-  const [provider, setProvider] = useState("all")
+  const [searchInput, setSearchInput] = useState(
+    new URLSearchParams(window.location.search).get("search") ?? ""
+  )
+  const [search, setSearch] = useState(
+    new URLSearchParams(window.location.search).get("search") ?? ""
+  )
+  const [state, setState] = useState(
+    new URLSearchParams(window.location.search).get("state") ?? "all"
+  )
+  const [period, setPeriod] = useState<OverviewWindow>(() => {
+    const value = new URLSearchParams(window.location.search).get("window")
+    return value === "7d" || value === "30d" ? value : "24h"
+  })
+  const overview = useOverview(period)
+  const [reason, setReason] = useState(
+    new URLSearchParams(window.location.search).get("reason") ?? ""
+  )
+  const [provider, setProvider] = useState(
+    new URLSearchParams(window.location.search).get("provider") ?? "all"
+  )
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setSearch(searchInput.trim()), 250)
@@ -129,18 +147,40 @@ function SessionList({ navigate }: { navigate: (href: string) => void }) {
   }, [searchInput])
 
   const queryString = useMemo(() => {
-    const params = new URLSearchParams({ limit: "100" })
+    const params = new URLSearchParams({
+      limit: "50",
+      workload: "automation",
+      window: period,
+    })
     if (search) params.set("search", search)
+    if (reason) params.set("reason", reason)
     if (state !== "all") params.set("state", state)
     if (provider !== "all") params.set("provider", provider)
     return params.toString()
-  }, [provider, search, state])
+  }, [provider, search, state, period, reason])
 
-  const sessions = useQuery({
+  const sessions = useInfiniteQuery({
     queryKey: ["sessions", queryString],
-    queryFn: () => fetchJson<SessionPage>(`/v1/admin/sessions?${queryString}`),
+    queryFn: ({ pageParam }) =>
+      fetchJson<SessionPage>(
+        `/v1/admin/sessions?${queryString}${pageParam ? `&before=${encodeURIComponent(pageParam)}` : ""}`
+      ),
+    initialPageParam: "",
+    getNextPageParam: (page) => page.next_cursor ?? undefined,
     refetchInterval: 10_000,
   })
+
+  const listParams = new URLSearchParams({ window: period })
+  if (state !== "all") listParams.set("state", state)
+  if (provider !== "all") listParams.set("provider", provider)
+  if (search) listParams.set("search", search)
+  if (reason) listParams.set("reason", reason)
+  const listUrl = listParams.toString()
+  useEffect(() => {
+    window.history.replaceState({}, "", `/sessions?${listUrl}`)
+  }, [listUrl])
+  const rows = sessions.data?.pages.flatMap((page) => page.sessions) ?? []
+  const stats = overview.data?.automation
 
   return (
     <main className="mx-auto min-h-svh w-full max-w-[100rem] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -153,14 +193,46 @@ function SessionList({ navigate }: { navigate: (href: string) => void }) {
             Sessions
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Search logical session history and inspect provider journeys.
+            Inspect browser connections, command failures, and resource usage.
           </p>
         </div>
-        <Badge variant="outline" className="w-fit font-mono">
-          {sessions.data?.sessions.length ?? 0} shown
-        </Badge>
+        <WindowPicker
+          value={period}
+          onChange={(value) => {
+            setPeriod(value)
+          }}
+        />
       </div>
 
+      {stats && (
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Metric
+            label="In-progress sessions"
+            value={number(stats.active)}
+            detail="Sessions holding global gateway capacity"
+          />
+          <Metric
+            label="Closed normally"
+            value={number(stats.counts.closed ?? 0)}
+            detail={`${percent(stats.counts.closed ?? 0, (stats.counts.closed ?? 0) + (stats.counts.failed ?? 0))} of terminal sessions`}
+          />
+          <Metric
+            label="Commands failed / interrupted"
+            value={`${number(stats.failed_commands)} / ${number(stats.interrupted_commands)}`}
+            detail={`${number(stats.command_count)} commands in retained summaries`}
+          />
+          <Metric
+            label="Median session length"
+            value={duration(stats.median_duration_ms)}
+            detail={`p95 ${duration(stats.p95_duration_ms)}`}
+          />
+        </div>
+      )}
+      {overview.isError && (
+        <p className="mt-4 text-sm text-destructive">
+          Session totals unavailable: {extractApiError(overview.error)}
+        </p>
+      )}
       <Card className="mt-6">
         <CardContent className="grid gap-3 p-4 md:grid-cols-[1fr_180px_180px]">
           <div className="relative">
@@ -214,13 +286,21 @@ function SessionList({ navigate }: { navigate: (href: string) => void }) {
         </CardContent>
       </Card>
 
+      {reason && (
+        <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <span>Reason: {humanize(reason)}</span>
+          <Button variant="ghost" size="sm" onClick={() => setReason("")}>
+            Clear reason filter
+          </Button>
+        </div>
+      )}
       <Card className="mt-4 overflow-hidden py-0">
         <div className="hidden grid-cols-[1.45fr_1.15fr_1fr_.65fr_.55fr] gap-3 border-b bg-muted/35 px-4 py-2 text-xs font-medium text-muted-foreground md:grid">
           <span>Session</span>
-          <span>Provider path</span>
+          <span>Browser provider</span>
           <span>Domains</span>
           <span>State</span>
-          <span className="text-right">Cost</span>
+          <span className="min-w-0 text-right break-all">Cost</span>
         </div>
         {sessions.isLoading ? (
           <div className="flex h-52 items-center justify-center">
@@ -230,13 +310,13 @@ function SessionList({ navigate }: { navigate: (href: string) => void }) {
           <div className="p-8 text-sm text-destructive">
             {extractApiError(sessions.error)}
           </div>
-        ) : sessions.data?.sessions.length ? (
+        ) : rows.length ? (
           <div className="divide-y">
-            {sessions.data.sessions.map((session) => (
+            {rows.map((session) => (
               <button
                 type="button"
                 key={session.id}
-                onClick={() => navigate(`/sessions/${session.id}`)}
+                onClick={() => navigate(`/sessions/${session.id}?${listUrl}`)}
                 className="grid w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/35 md:grid-cols-[1.45fr_1.15fr_1fr_.65fr_.55fr] md:items-center"
               >
                 <div className="min-w-0">
@@ -269,6 +349,22 @@ function SessionList({ navigate }: { navigate: (href: string) => void }) {
           </div>
         )}
       </Card>
+      {sessions.hasNextPage && (
+        <div className="mt-4 text-center">
+          <Button
+            variant="outline"
+            disabled={sessions.isFetchingNextPage}
+            onClick={() => void sessions.fetchNextPage()}
+          >
+            {sessions.isFetchingNextPage ? "Loading…" : "Load more sessions"}
+          </Button>
+        </div>
+      )}
+      <p className="mt-4 text-xs leading-5 text-muted-foreground">
+        {plural(rows.length, "session")} shown. Normal closure describes the
+        connection, not the caller’s task outcome. Totals cover the period,
+        independent of list filters.
+      </p>
     </main>
   )
 }
@@ -314,16 +410,20 @@ function EventTimeline({ events }: { events: ActivityEvent[] }) {
               }).format(new Date(event.occurred_at))}
             </p>
             <div>
-              <p className="text-sm font-medium">
-                {humanize(event.event_type)}
-              </p>
-              <p className="mt-1 font-mono text-xs break-all text-muted-foreground">
+              <p className="text-sm font-medium">{eventTitle(event)}</p>
+              <p className="mt-1 text-xs break-all text-muted-foreground">
                 {summarizeCommandMethods(event.payload) ??
                   (typeof event.payload.method === "string"
                     ? event.payload.method
                     : typeof event.payload.reason === "string"
                       ? humanize(event.payload.reason)
-                      : (event.attempt_id ?? "Session event"))}
+                      : typeof event.payload.url === "string"
+                        ? event.payload.url
+                        : typeof event.payload.status === "number"
+                          ? `HTTP ${event.payload.status}`
+                          : typeof event.payload.error_type === "string"
+                            ? humanize(event.payload.error_type)
+                            : "Lifecycle observation")}
               </p>
               {typeof event.payload.duration_ms === "number" && (
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -363,12 +463,14 @@ function SessionDetailView({
     queryFn: () => fetchJson<SessionDetail>(`/v1/admin/sessions/${sessionId}`),
     refetchInterval: 5_000,
   })
-  const events = useQuery({
+  const events = useInfiniteQuery({
     queryKey: ["session-events", sessionId],
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       fetchJson<ActivityEventPage>(
-        `/v1/admin/events?session_id=${encodeURIComponent(sessionId)}&limit=500`
+        `/v1/admin/events?session_id=${encodeURIComponent(sessionId)}&limit=500${pageParam ? `&before=${encodeURIComponent(pageParam)}` : ""}`
       ),
+    initialPageParam: "",
+    getNextPageParam: (page) => page.next_cursor ?? undefined,
     refetchInterval: 5_000,
   })
 
@@ -382,7 +484,10 @@ function SessionDetailView({
   if (detail.isError || !detail.data) {
     return (
       <main className="mx-auto max-w-[100rem] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <Button variant="ghost" onClick={() => navigate("/sessions")}>
+        <Button
+          variant="ghost"
+          onClick={() => navigate(`/sessions${window.location.search}`)}
+        >
           <ArrowLeft />
           Sessions
         </Button>
@@ -395,6 +500,34 @@ function SessionDetailView({
     )
   }
   const session = detail.data
+  if (session.workload === "capture")
+    return <CaptureDetailView sessionId={sessionId} navigate={navigate} />
+  const retainedEvents = [...(events.data?.pages ?? [])]
+    .reverse()
+    .flatMap((page) => page.events)
+  const commandStats = retainedEvents.reduce(
+    (totals, event) => {
+      if (
+        event.event_type !== "command.summary" ||
+        !event.payload.methods ||
+        typeof event.payload.methods !== "object"
+      )
+        return totals
+      for (const usage of Object.values(
+        event.payload.methods as Record<string, Record<string, unknown>>
+      )) {
+        totals.count += typeof usage.count === "number" ? usage.count : 0
+        totals.failed +=
+          typeof usage.failed_count === "number" ? usage.failed_count : 0
+        totals.interrupted +=
+          typeof usage.interrupted_count === "number"
+            ? usage.interrupted_count
+            : 0
+      }
+      return totals
+    },
+    { count: 0, failed: 0, interrupted: 0 }
+  )
 
   return (
     <main className="mx-auto min-h-svh w-full max-w-[100rem] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -402,7 +535,7 @@ function SessionDetailView({
         variant="ghost"
         size="sm"
         className="-ml-2"
-        onClick={() => navigate("/sessions")}
+        onClick={() => navigate(`/sessions${window.location.search}`)}
       >
         <ArrowLeft />
         All sessions
@@ -411,7 +544,7 @@ function SessionDetailView({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="truncate font-mono text-xl font-semibold">
-              {session.id}
+              Session {session.id.slice(0, 8)}
             </h1>
             <StateBadge state={session.state} />
           </div>
@@ -457,6 +590,17 @@ function SessionDetailView({
         />
       </div>
 
+      <div className="mt-4 rounded-lg border bg-card p-4">
+        <p className="text-sm font-medium">Command outcomes</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {number(commandStats.count)} commands · {number(commandStats.failed)}{" "}
+          failed · {number(commandStats.interrupted)} interrupted
+        </p>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          From loaded, retained attempt summaries. Active attempts publish their
+          summary when they finish.
+        </p>
+      </div>
       {session.state === "failed" && session.terminal_reason && (
         <Card className="mt-4 border-destructive/30 bg-destructive/5">
           <CardContent className="flex items-center gap-3 p-4 text-sm text-destructive">
@@ -481,9 +625,23 @@ function SessionDetailView({
                 <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
               </CardContent>
             ) : (
-              <EventTimeline
-                events={[...(events.data?.events ?? [])].reverse()}
-              />
+              <>
+                {events.hasNextPage && (
+                  <div className="border-b p-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={events.isFetchingNextPage}
+                      onClick={() => void events.fetchNextPage()}
+                    >
+                      {events.isFetchingNextPage
+                        ? "Loading…"
+                        : "Load earlier events"}
+                    </Button>
+                  </div>
+                )}
+                <EventTimeline events={retainedEvents} />
+              </>
             )}
           </Card>
 
@@ -579,33 +737,30 @@ function SessionDetailView({
                     {attempt.phase_summary && (
                       <div className="mt-4 rounded-md border bg-muted/20 p-3">
                         <p className="text-xs font-medium text-muted-foreground">
-                          Shadow phase measurements
+                          How browser time was spent
                         </p>
                         <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
                           {[
                             {
                               label: "Observed",
-                              value:
-                                attempt.phase_summary.observed_session_ms,
+                              value: attempt.phase_summary.observed_session_ms,
                             },
                             {
-                              label: "Command active",
+                              label: "Commands in progress",
                               value: attempt.phase_summary.command_active_ms,
                             },
                             {
-                              label: "No command in flight",
+                              label: "Between commands",
                               value:
                                 attempt.phase_summary.no_command_in_flight_ms,
                             },
                             {
                               label: "Before first command",
-                              value:
-                                attempt.phase_summary.pre_first_command_ms,
+                              value: attempt.phase_summary.pre_first_command_ms,
                             },
                             {
                               label: "After last command",
-                              value:
-                                attempt.phase_summary.post_last_command_ms,
+                              value: attempt.phase_summary.post_last_command_ms,
                             },
                             {
                               label: "Provider bootstrap",
@@ -647,6 +802,7 @@ function SessionDetailView({
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               {[
+                ["Session ID", session.id],
                 ["Created", formatDate(session.created_at)],
                 ["Admitted", formatDate(session.admitted_at)],
                 ["Opened", formatDate(session.opened_at)],
@@ -655,7 +811,7 @@ function SessionDetailView({
               ].map(([label, value]) => (
                 <div className="flex justify-between gap-4" key={label}>
                   <span className="text-muted-foreground">{label}</span>
-                  <span className="text-right">{value}</span>
+                  <span className="min-w-0 text-right break-all">{value}</span>
                 </div>
               ))}
             </CardContent>

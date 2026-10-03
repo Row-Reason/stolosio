@@ -66,6 +66,8 @@ class PostgresSessionRepository:
                 lease_token=session.lease_token,
                 client_reference=client_reference,
                 requested_settings=requested_settings,
+                workload=session.workload,
+                capture_hostname=session.capture_hostname,
                 state=SessionState.REQUESTED.value,
                 created_at=now,
             )

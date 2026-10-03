@@ -25,7 +25,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select"
 import { extractApiError } from "@/lib/api"
-import { summarizeCommandMethods } from "@/lib/events"
+import { captureEventDetail, summarizeCommandMethods } from "@/lib/events"
 import { cn } from "@/lib/utils"
 import type {
   ActivityEvent,
@@ -85,6 +85,7 @@ const failureEventTypes: ActivityEventType[] = [
   "page.crashed",
   "javascript.exception",
   "provider.disconnected",
+  "capture.completed",
 ]
 
 const operationalEventTypes: ActivityEventType[] = [
@@ -252,6 +253,8 @@ function MultiSelect<T extends string>({
 
 function eventDetail(event: ActivityEvent) {
   const payload = event.payload
+  const captureDetail = captureEventDetail(payload)
+  if (captureDetail) return captureDetail
   const commandSummary = summarizeCommandMethods(payload)
   if (commandSummary) return commandSummary
   if (
@@ -443,7 +446,11 @@ function EventDetails({
               <button
                 type="button"
                 className="truncate font-mono text-primary hover:underline"
-                onClick={() => navigate(`/sessions/${event.session_id}`)}
+                onClick={() =>
+                  navigate(
+                    `/${event.event_family === "capture" ? "captures" : "sessions"}/${event.session_id}`
+                  )
+                }
               >
                 {event.session_id}
               </button>
@@ -499,7 +506,9 @@ export function ActivityPage({ navigate }: ActivityPageProps) {
   >(providers.map(({ value }) => value))
   const [outcome, setOutcome] = useState<OutcomeFilter>("all")
   const [historyWindow, setHistoryWindow] = useState<HistoryWindow>("24h")
-  const [sessionId, setSessionId] = useState("")
+  const [sessionId, setSessionId] = useState(
+    new URLSearchParams(window.location.search).get("session_id") ?? ""
+  )
   const [attemptId, setAttemptId] = useState("")
   const [paused, setPaused] = useState(false)
   const [following, setFollowing] = useState(true)
@@ -631,7 +640,7 @@ export function ActivityPage({ navigate }: ActivityPageProps) {
   const applyProfile = (value: FilterProfile) => {
     if (value === "custom") return
     setProfile(value)
-    setOutcome("all")
+    setOutcome(value === "failures" ? "failure" : "all")
     setSelectedEventTypes(profileEventTypes[value])
     setSelectedProviders(providers.map(({ value: provider }) => provider))
   }
@@ -750,7 +759,7 @@ export function ActivityPage({ navigate }: ActivityPageProps) {
             {statusLabel(streamStatus, paused)}
           </div>
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            Activity
+            Events
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             A live, sanitized operational log across Stolosio sessions.

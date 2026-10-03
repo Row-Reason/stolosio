@@ -3,8 +3,9 @@ import json
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Literal
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.db.models import (
@@ -13,6 +14,11 @@ from backend.db.models import (
     GatewaySession,
     SessionDomain,
 )
+from backend.proxy.workload_facts import (
+    WINDOWS,
+    capture_outcome_expression,
+    capture_path_expression,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +26,12 @@ class SessionFilters:
     search: str | None = None
     state: str | None = None
     provider: str | None = None
+    workload: Literal["automation", "capture"] | None = None
+    outcome: str | None = None
+    path: Literal["http", "managed", "local_resolution", "challenge_resolution"] | None = None
+    since: datetime | None = None
+    window: Literal["24h", "7d", "30d"] | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +73,29 @@ def _duration_seconds(session: GatewaySession) -> float | None:
     return max(0, (end - session.created_at).total_seconds())
 
 
+def capture_path(summary: dict | None) -> str | None:
+    if summary is None:
+        return None
+    tiers = summary["tiers"]
+    if "challenge_resolution" in tiers:
+        return "challenge_resolution"
+    return "managed" if "managed" in tiers else "http"
+
+
+def capture_outcome(session: GatewaySession) -> str:
+    if session.capture_summary is not None:
+        return session.capture_summary["outcome"]
+    if session.state not in ("closed", "failed"):
+        return "in_progress"
+    if session.terminal_reason in (
+        "gateway_capacity_full",
+        "provider_queue_full",
+        "provider_queue_timeout",
+    ):
+        return "rejected"
+    return "interrupted" if session.state == "failed" else "unknown"
+
+
 class SessionQueryService:
     def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
         self._sessions = sessions
@@ -72,13 +107,35 @@ class SessionQueryService:
         before: str | None = None,
         limit: int = 50,
     ) -> SessionPage:
+        if (filters.outcome or filters.path) and filters.workload != "capture":
+            raise ValueError("Capture outcome and path filters require workload=capture")
         query = select(GatewaySession)
+        if filters.workload:
+            query = query.where(GatewaySession.workload == filters.workload)
+        if filters.reason:
+            query = query.where(
+                func.coalesce(
+                    GatewaySession.capture_summary["failure_code"].as_string(),
+                    GatewaySession.terminal_reason,
+                )
+                == filters.reason
+            )
+        since = datetime.now(UTC) - WINDOWS[filters.window] if filters.window else filters.since
+        if since:
+            query = query.where(
+                func.coalesce(GatewaySession.closed_at, GatewaySession.created_at) >= since
+            )
+        if filters.outcome:
+            query = query.where(capture_outcome_expression() == filters.outcome)
+        if filters.path:
+            query = query.where(capture_path_expression() == filters.path)
         if filters.search:
             value = f"%{filters.search.strip()}%"
             query = query.where(
                 or_(
                     GatewaySession.id.ilike(value),
                     GatewaySession.client_reference.ilike(value),
+                    GatewaySession.capture_hostname.ilike(value),
                 )
             )
         if filters.state:
@@ -183,9 +240,7 @@ class SessionQueryService:
                     "modeled_cost_units": attempt.modeled_cost_units,
                     "chargeable_time_ms": attempt.chargeable_time_ms,
                     "cost_basis": attempt.cost_basis,
-                    "cost_rate_units_per_second": (
-                        attempt.cost_rate_units_per_second
-                    ),
+                    "cost_rate_units_per_second": (attempt.cost_rate_units_per_second),
                     "resolved_setting_keys": sorted(attempt.resolved_settings),
                     "setting_sources": attempt.setting_sources,
                     "created_at": _iso(attempt.created_at),
@@ -215,14 +270,17 @@ class SessionQueryService:
             "id": session.id,
             "client_reference": session.client_reference,
             "state": session.state,
+            "workload": session.workload,
+            "capture_hostname": session.capture_hostname,
+            "capture": session.capture_summary,
+            "capture_outcome": capture_outcome(session) if session.workload == "capture" else None,
+            "capture_path": capture_path(session.capture_summary),
             "created_at": _iso(session.created_at),
             "closed_at": _iso(session.closed_at),
             "duration_seconds": _duration_seconds(session),
             "terminal_reason": session.terminal_reason,
             "providers": [attempt.provider for attempt in attempts],
-            "modeled_cost_units": sum(
-                attempt.modeled_cost_units or 0 for attempt in attempts
-            ),
+            "modeled_cost_units": sum(attempt.modeled_cost_units or 0 for attempt in attempts),
             "total_browser_time_ms": sum(
                 attempt.provider_reported_ms
                 if attempt.provider_reported_ms is not None
@@ -230,8 +288,7 @@ class SessionQueryService:
                 for attempt in attempts
             ),
             "total_capacity_occupied_ms": sum(
-                attempt.capacity_occupied_ms or 0
-                for attempt in attempts
+                attempt.capacity_occupied_ms or 0 for attempt in attempts
             ),
             "domains": [{"id": domain_id, "hostname": hostname} for domain_id, hostname in domains],
         }

@@ -303,7 +303,7 @@ export function PolicyPage() {
           Control plane
         </div>
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          Policy
+          Settings
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Global request blocking and the cost model applied to provider usage.

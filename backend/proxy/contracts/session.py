@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal
 
 from backend.proxy.contracts.provider import ProviderName
 
@@ -28,6 +29,8 @@ class StolosioSession:
     owner_id: str
     lease_token: str
     state: SessionState
+    workload: Literal["automation", "capture"] = "automation"
+    capture_hostname: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

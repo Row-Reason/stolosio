@@ -69,7 +69,7 @@ browser time, chargeable time, and aggregated per-method
 end-to-end/provider latency where available. It does not retain completed commands
 individually. Every attempt's modeled cost is its slot occupancy (capacity-occupied
 time, from acquisition to release) times its provider's rate in cost units per second.
-Operators manage the rates on the admin Policy page (`GET /v1/admin/costs/rates`,
+Operators manage the rates on the admin Settings page (`GET /v1/admin/costs/rates`,
 `PATCH /v1/admin/costs/rates/{provider}`); startup seeds `browserless` at 100 and
 `browserless_cloud` at 300. The rate and basis are captured on the finalized attempt. One bounded method summary is stored transactionally when
 each attempt ends and folded into cumulative

@@ -33,10 +33,10 @@ Paid Browserless cloud requires a configured token and capacity an operator has 
 
 ## Cost rates
 
-Every acquisition attempt is charged for the time it holds capacity, from acquisition to release, at its provider's rate in cost units per second. Operators set the rates on the Policy page; installation defaults are 100 for `browserless` and 300 for `browserless_cloud`. The Cost page reports the resulting totals.
+Every acquisition attempt is charged for the time it holds capacity, from acquisition to release, at its provider's rate in cost units per second. Operators set the rates on the Settings page; installation defaults are 100 for `browserless` and 300 for `browserless_cloud`. The Usage page reports the resulting totals.
 
 ## Domain blocking
 
-The same operator-managed domain blocklist, edited on the Policy page, applies to every browser attempt and every capture. It is meant for ads, trackers and similar requests. In `/v1/connect` sessions it fails a page's own requests to a listed host but does not stop navigating to one; capture also refuses those navigations, and its plain HTTP fetch checks every redirect hop. Stolosio returns `domain_blocking_unavailable` if it cannot apply the policy.
+The same operator-managed domain blocklist, edited on the Settings page, applies to every browser attempt and every capture. It is meant for ads, trackers and similar requests. In `/v1/connect` sessions it fails a page's own requests to a listed host but does not stop navigating to one; capture also refuses those navigations, and its plain HTTP fetch checks every redirect hop. Stolosio returns `domain_blocking_unavailable` if it cannot apply the policy.
 
 This policy does not replace network isolation. See [security](/docs/security/).

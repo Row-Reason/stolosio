@@ -1144,7 +1144,7 @@ export function FleetsPage({ provider, navigate }: FleetPageProps) {
               Live capacity
             </div>
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-              Fleets
+              Capacity
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               Monitor provider demand, usable browser capacity, and Stolosio’s
