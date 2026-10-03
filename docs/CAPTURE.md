@@ -43,13 +43,46 @@ domain, which also catches redirect hops.
 
 ## Challenge resolution
 
-A bot challenge is resolved only when the request sets `resolve_bot_challenges` and an operator has
-enabled the `browserless_cloud` provider (`PATCH /v1/admin/providers/browserless_cloud/capacity`;
-it needs `BROWSERLESS_CLOUD_TOKEN`). The capture then trades its local slot for a
-`browserless_cloud` attempt, counted against that provider's concurrency limit, and Browserless
-BrowserQL unblocks the page through a residential proxy (`BROWSERLESS_CLOUD_PROXY_COUNTRY`, default
-`jp`). No cloud capacity fails the capture as `capacity` (transient): Stolosio's own limit
-(`retry_after_seconds` 5), or Browserless refusing for the plan's limits — HTTP 429 or a BrowserQL
+When `resolve_bot_challenges` is true, bot challenges and bot block pages first try
+`local_resolution` on the capture's existing
+local fleet slot. The initial resolver is deliberately simple: a fresh browser context using the
+browser's native user agent. Images, fonts and media are permitted, with a transfer cap;
+service workers remain blocked to preserve URL exclusions. The initial 10-second challenge wait
+extends up to 25 seconds when progress is observed, with 35 seconds for the entire local attempt (also bounded by the capture deadline). It has no external
+solver fee; local capacity and browser time still count. All local requests enforce exclusions and
+network policy, and returned content is re-assessed before acceptance.
+
+If protection holds or the local resolver is unavailable, paid fallback is allowed only when
+`resolve_bot_challenges` is true and an operator has enabled `browserless_cloud`
+(`PATCH /v1/admin/providers/browserless_cloud/capacity`; needs `BROWSERLESS_CLOUD_TOKEN`). This flag
+gates both local and paid resolution. When false, neither resolver runs. The capture trades its local slot for a
+cloud attempt, counted against that provider's concurrency limit, and Browserless BrowserQL
+unblocks through a residential proxy (`BROWSERLESS_CLOUD_PROXY_COUNTRY`, default `jp`). No cloud
+capacity fails as `capacity` (transient). Provider-side navigation retains its existing exclusion
+limitation: exclusions apply after CDP handover, not to redirect hops during BrowserQL navigation.
+
+Evidence identifies `direct`, `managed`, `local_resolution`, and paid `challenge_resolution`
+attempts, including each assessment, decision, duration, and reason for escalation. A bot failure's
+`resolution_attempted` includes local attempts. Neither resolution tier repeats within a capture.
+
+### Local demonstration
+
+With the development Compose stack running:
+
+```bash
+STOLOSIO_E2E=1 uv run pytest tests/e2e/test_capture_e2e.py -k local_resolution -q -s
+```
+
+The test creates a temporary Docker origin on a Docker-only public-address subnet (special-use
+addresses are correctly denied by egress). It connects the local proxy and browser to that network,
+then removes the origin and network on teardown without relaxing the firewall. It demonstrates a
+JavaScript challenge clearing locally when resolution is enabled, complete content
+returned without paid usage, and challenges failing without any solver attempt
+when resolution is disabled. This verifies plumbing;
+it makes no claim about solving real CAPTCHA providers. Paid-fallback ordering and capacity are
+covered separately by package and Postgres integration tests.
+
+External capacity refusals include Stolosio limits (`retry_after_seconds` 5), or Browserless refusing for the plan's limits — HTTP 429 or a BrowserQL
 error naming a concurrency or rate limit (Retry-After, else 30 s), HTTP 402 or an error naming a
 quota, units or billing (Retry-After, else 3600 s). Any other BrowserQL HTTP error, unreadable
 response or connection failure is an outage: `browser_unavailable`. Every BrowserQL failure logs a
@@ -62,9 +95,31 @@ token and URL queries redacted; failure messages carry the same summary.
   confirmed that plain HTTP is enough. It is the only thing Stolosio learns about sites; the
   maintenance worker purges entries unseen for `CAPTURE_METHOD_CACHE_RETENTION_DAYS` (30).
 - Every capture writes a `capture.completed` outbox event: outcome, failure code and category,
-  tiers used, duration, browser seconds, whether a paid tier was used, bytes.
+  tiers used, per-attempt tier/decision/status/duration (no URLs or page data), total duration, browser
+  seconds, whether a paid tier was used, bytes.
+
 - A failed capture logs a warning with its failure code, category, transience and session id;
   never the URL or the failure message, which may carry credentials.
 - Metrics: `stolosio_captures_total{outcome,category}`, `stolosio_capture_rejected_total{reason}`,
   `stolosio_capture_duration_seconds{tier}`, `stolosio_capture_browser_seconds_total{tier}`,
   `stolosio_capture_paid_total`.
+
+## Acquisition analytics
+
+Stolosio records one durable, idempotent fact per completed capture, independently of
+DEBUG retention. `GET /v1/admin/captures/overview?window=7d` (also `24h`, `30d`, `90d`)
+feeds the admin Captures page. The four outcomes are `default` (normal acquisition),
+`internally_resolved`, `externally_resolved`, and `total_failure`. Successful attribution
+follows the document returned: a retained plain response stays `default` even if a
+resolver was attempted and failed. A paid attempt is supplier usage, not proof of
+external success.
+
+The overview reports counts and rates for all completed captures and for captures
+with detected bot protection and resolution enabled. It includes resolver attempt
+counts, time, paid usage and mean capture duration. Empty cohorts have null rates.
+Admission refusals and captures interrupted before completion are outside this denominator.
+Tracking starts with the new table; historical DEBUG data is not backfilled. No URL,
+page body, cookies or credentials are stored in this projection. Acquisition acceptance
+does not establish downstream usefulness; Periplus owns that assessment and its customer
+usage accounting. The public capture response retains its existing attempt evidence;
+the four analytics labels are internal to Stolosio.

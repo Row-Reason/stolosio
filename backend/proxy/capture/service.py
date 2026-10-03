@@ -8,10 +8,11 @@ from pagecapture import BqlBrowserTier, CaptureRequest, CaptureResult, CaptureSe
 from pagecapture import Settings as PageCaptureSettings
 from pagecapture.classify import Classifier
 from pagecapture.render import BrowserCapacity, Renderer
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.db.errors import is_transient_database_error
-from backend.db.models import SessionEventRecord
+from backend.db.models import CaptureResultRecord, SessionEventRecord
 from backend.events.registry import EventType, validate_payload
 from backend.metrics.definitions import (
     CAPTURE_BROWSER_SECONDS,
@@ -22,6 +23,7 @@ from backend.metrics.definitions import (
 )
 from backend.proxy.adapters.browserless_cloud import browserless_cloud_url
 from backend.proxy.attempts import AttemptAdmission, AttemptLease
+from backend.proxy.capture.analytics import capture_facts
 from backend.proxy.capture.cache import PostgresMethodCache
 from backend.proxy.capture.fetcher import StolosioFetcher
 from backend.proxy.capture.tiers import CloudChallengeTier, SharedRenderer, SlotTier
@@ -98,6 +100,20 @@ class CaptureRunner:
         )
         self._fetcher = StolosioFetcher(self._page_settings, proxy=settings.http_fetch_proxy_url)
         self._renderer = SharedRenderer(Renderer(self._page_settings))
+        self._local_renderer = SharedRenderer(
+            Renderer(
+                replace(
+                    self._page_settings,
+                    render_cap_s=self._page_settings.local_resolution_cap_s
+                    - self._page_settings.local_resolution_progress_wait_s,
+                    block_resources=(),
+                ),
+                user_agent=None,
+                challenge_wait_s=self._page_settings.local_resolution_wait_s,
+                challenge_progress_wait_s=self._page_settings.local_resolution_progress_wait_s,
+                intercept=False,
+            )
+        )
         self._cloud = (
             BqlBrowserTier(
                 browserless_cloud_url(
@@ -117,7 +133,7 @@ class CaptureRunner:
         self._cache = PostgresMethodCache(database_sessions)
 
     async def close(self) -> None:
-        for part in (self._fetcher, self._renderer, self._cloud):
+        for part in (self._fetcher, self._renderer, self._local_renderer, self._cloud):
             if part is not None:
                 await part.close()
 
@@ -174,6 +190,7 @@ class CaptureRunner:
                 self._page_settings,
                 fetcher=self._fetcher,
                 managed=SlotTier(self._renderer, endpoint),
+                local_resolution=SlotTier(self._local_renderer, endpoint, local=True),
                 challenge_resolution=await self._challenge_tier(request, capture, resolved),
                 classifier=self._classifier,
                 cache=self._cache,
@@ -202,7 +219,10 @@ class CaptureRunner:
         finally:
             duration_ms = round((time.monotonic() - started) * 1000)
             if result is not None:
-                await self._bounded(self._record(session, result, duration_ms), "capture event")
+                await self._bounded(
+                    self._record(session, result, duration_ms, request.resolve_bot_challenges),
+                    "capture event",
+                )
             for attempt in (capture.cloud, capture.slot):
                 if attempt is not None:
                     await self._bounded(attempt.release(failed=failed, reason=reason), "attempt")
@@ -250,18 +270,17 @@ class CaptureRunner:
 
         return CloudChallengeTier(self._cloud, switch)
 
-    async def _record(self, session: SessionLease, result: CaptureResult, duration_ms: int) -> None:
+    async def _record(
+        self,
+        session: SessionLease,
+        result: CaptureResult,
+        duration_ms: int,
+        resolution_enabled: bool,
+    ) -> None:
         tiers = list(dict.fromkeys(attempt.tier for attempt in result.evidence.attempts))
         last_tier = result.evidence.attempts[-1].tier if result.evidence.attempts else "direct"
         cost = result.evidence.cost
         failure = result.failure
-        CAPTURES.labels(result.outcome, failure.category if failure else "none").inc()
-        CAPTURE_DURATION.labels(last_tier).observe(duration_ms / 1000)
-        for attempt in result.evidence.attempts:
-            if attempt.path == "browser":
-                CAPTURE_BROWSER_SECONDS.labels(attempt.tier).inc(attempt.duration_ms / 1000)
-        if cost.paid:
-            CAPTURE_PAID.inc()
         payload = validate_payload(
             EventType.CAPTURE_COMPLETED,
             {
@@ -270,6 +289,15 @@ class CaptureRunner:
                 "failure_category": failure.category if failure else None,
                 "representation": result.document.representation if result.document else None,
                 "tiers": tiers,
+                "attempts": [
+                    {
+                        "tier": a.tier,
+                        "decision": a.decision,
+                        "status": a.status_code,
+                        "duration_ms": a.duration_ms,
+                    }
+                    for a in result.evidence.attempts
+                ],
                 "duration_ms": duration_ms,
                 "browser_seconds": cost.browser_seconds,
                 "paid": cost.paid,
@@ -277,16 +305,37 @@ class CaptureRunner:
             },
         )
         async with self._database_sessions.begin() as database:
+            recorded_at = datetime.now(UTC)
+            inserted = await database.scalar(
+                insert(CaptureResultRecord)
+                .values(
+                    session_id=session.session.session_id,
+                    completed_at=recorded_at,
+                    **capture_facts(result, resolution_enabled, duration_ms),
+                )
+                .on_conflict_do_nothing(index_elements=["session_id"])
+                .returning(CaptureResultRecord.session_id)
+            )
+            if inserted is None:
+                return
             database.add(
                 SessionEventRecord(
                     session_id=session.session.session_id,
                     event_type=EventType.CAPTURE_COMPLETED.value,
                     provider=None,
                     reason=failure.code[:64] if failure else None,
-                    occurred_at=datetime.now(UTC),
+                    occurred_at=recorded_at,
                     payload=payload,
                 )
             )
+
+        CAPTURES.labels(result.outcome, failure.category if failure else "none").inc()
+        CAPTURE_DURATION.labels(last_tier).observe(duration_ms / 1000)
+        for attempt in result.evidence.attempts:
+            if attempt.path == "browser":
+                CAPTURE_BROWSER_SECONDS.labels(attempt.tier).inc(attempt.duration_ms / 1000)
+        if cost.paid:
+            CAPTURE_PAID.inc()
 
     @staticmethod
     def _unavailable(reason: str) -> CaptureUnavailable:

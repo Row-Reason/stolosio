@@ -110,6 +110,31 @@ def test_site_own_captcha_page_is_a_challenge():
     assert rules.bot_challenge(doc, {}).value
 
 
+def test_botstopper_http_200_denial_is_not_content():
+    doc = Document(
+        "https://example.com/",
+        response(
+            "<title>Something went wrong!</title><h1>Access Denied: error code abc</h1>"
+            "<p>Protected by BotStopper From Techaro.</p>"
+        ),
+    )
+    assert rules.bot_challenge(doc, {}).value
+    assert rules.block_page(doc) == "block page: bot protection access denied"
+
+
+def test_article_mentioning_botstopper_and_denial_is_not_a_challenge():
+    doc = Document(
+        "https://example.com/",
+        response(
+            "<title>Browser protection review</title><main>"
+            + "Useful article content. " * 200
+            + "BotStopper sometimes displays Access Denied.</main>"
+        ),
+    )
+    assert not rules.bot_challenge(doc, {}).value
+    assert rules.block_page(doc) is None
+
+
 def test_declarative_shadow_dom_text_counts_as_content():
     html = (
         '<html><body><vt-app><template shadowrootmode="open"><h1>Analyse suspicious files</h1>'

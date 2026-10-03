@@ -55,7 +55,11 @@ session for its lifetime.
 Page capture uses the same admission and capacity. It fetches plain HTTP through the
 egress proxy and renders on a local Browserless slot when HTTP is not enough; the per-URL
 method cache in PostgreSQL (`capture_method_cache`) records where plain HTTP was
-confirmed sufficient.
+confirmed sufficient. With `resolve_bot_challenges` enabled, capture tries the internal
+resolver before an available external resolver. PostgreSQL `capture_results` stores
+one compact acquisition fact per completed capture, in the same transaction as its
+outbox event. This projection survives DEBUG retention and powers the admin capture
+analytics; downstream products own their own customer usage and usefulness assessments.
 
 ## Capacity
 

@@ -40,7 +40,7 @@ Content-Type: application/json
 | Field | Required | Meaning |
 |---|---|---|
 | `url` | yes | Absolute http(s) URL. |
-| `resolve_bot_challenges` | no, default `false` | May a bot challenge be resolved? Resolution uses a costlier tier; the caller decides, e.g. from the customer's plan. |
+| `resolve_bot_challenges` | no, default `false` | Permits local challenge resolution followed by paid fallback if available. Neither runs when false. |
 | `exclusions` | no, default `[]` | URLs never to fetch: `[{"host", "path_prefix"}]`, at most 1,000. `host` is exact, `*.example.com` (the domain and every subdomain) or `*`; `path_prefix` (default `/`) matches whole decoded path segments, so `/admin` covers `/admin/users` but not `/administrator`. Checked on every redirect hop of the plain fetch and for every request the browser makes, on top of the service's own network policy. |
 | `accept` | no, default any | Media types the caller stores. A successful response of any other type fails fast as `unsupported_media_type`, without its body. Error responses are still read, so a 429 or 404 fails with its own code. |
 | `reference` | no | Caller's trace id (at most 256 characters), echoed back. Not used for deduplication. |
@@ -50,7 +50,8 @@ Unknown fields and invalid values are rejected (400), and so is a `url` that the
 There is deliberately no render mode or completion setting: both are automatic.
 
 The service fetches and renders as one bot identity, `StolosioBot` (with an info URL, in a browser-shaped user
-agent). The challenge tier keeps its provider's own browser identity: its stealth fingerprint is what gets it
+agent). Local resolution keeps the native browser identity; the paid tier keeps its provider's identity:
+its stealth fingerprint is what gets it
 through. A challenge tier that navigates on the provider's side (Browserless BrowserQL) applies the exclusions from
 the handover on and to the page it landed on; redirect hops inside the provider's own navigation can't be checked.
 
@@ -74,8 +75,8 @@ plain HTTP ─► blocked / broken / unreachable ──────────�
     │                                        │                ├─ plain had it all ─► captured (response_body, verified)
     │                                        │                └─ browser added content ─► captured (rendered_html)
     │                                        └─ bot challenge ─┐
-    └─ bot challenge ──────────────────────────────────────────┴─► challenge resolution (only if resolve_bot_challenges,
-       or block page                                                 else failed: bot_challenge / bot_blocked)
+    └─ bot challenge ──────────────────────────────────────────┴─► local resolution ─► paid resolution
+       or block page                                                 (both only if resolve_bot_challenges)
 ```
 
 - **Render by default.** Raw HTML can't show everything a browser adds (on a random sample of the web, rendering
@@ -89,15 +90,18 @@ plain HTTP ─► blocked / broken / unreachable ──────────�
   pattern has ≥3 sufficient comparisons and hasn't been contradicted twice, and the plain response looks as usual
   (same size range, usable). Entries expire after 30 days without being seen. A 5% canary share of cache-approved
   captures is rendered anyway, so the evidence keeps refreshing itself.
-- Only bot protection escalates to **challenge resolution**, and only when `resolve_bot_challenges` is true. Two
-  kinds are told apart:
-  - a **challenge** (Cloudflare "Just a moment", DataDome/PerimeterX captchas, Imperva iframe, …) that a real
-    browser can pass: resolution is tried;
-  - a **block page** ("Sorry, you have been blocked", Akamai "Access Denied", Cloudflare 1020, AWS WAF block, …)
-    that refuses the client's IP or fingerprint. Solving captchas can't help, only a different identity can.
-    Resolution is tried only when the challenge tier egresses through proxies (`PAGECAPTURE_CHALLENGE_PROXIED`);
-    otherwise it fails fast as `bot_blocked` instead of paying for a render that can't succeed.
-  Resolution costs (browser time, proxy traffic) are accepted whenever the caller sets `resolve_bot_challenges`.
+- Bot protection tries **local resolution** when `resolve_bot_challenges` is true and a local tier is configured: a bounded native-browser retry
+  with no external solver fee. The host supplies its own local tier; the default CDP implementation waits for
+  browser-executable challenges. Images, fonts and media are permitted under the transfer cap;
+  service workers remain blocked to preserve exclusions. Local fleet time still counts as cost.
+- If protection holds, **paid challenge resolution** is tried only when `resolve_bot_challenges` is true.
+  A block page refusing the IP/fingerprint uses paid fallback only when that tier is proxied.
+- Each attempt is independently assessed; a solver result alone never means `captured`. Evidence distinguishes
+  `local_resolution` from paid `challenge_resolution`, and `resolution_attempted` includes either tier.
+- Resolution tiers do not repeat. Local retries have a 35-second budget with an initial 10-second challenge wait,
+  extended up to 25 seconds only when challenge progress changes,
+  bounded by the remaining capture deadline; failed local acquisition can still fall back to paid resolution.
+
 - **Never downgrade.** When the browser meets a challenge, gets an error status (403, 5xx, 429), fails, or renders
   nothing while the plain response was usable, the plain response is returned, with a note that it could not be
   verified by rendering.
@@ -195,8 +199,8 @@ request; **503** only when the service can't accept requests at all (same body s
 | `paywall` | website | no | 402, content behind payment |
 | `parked` | website | no | parked or for-sale domain, empty server default |
 | `geo_blocked` | website | no | 451, or "not available in your region" |
-| `bot_challenge` | website | no | a bot challenge that wasn't passed: not requested, or resolution failed (`resolution_attempted`) |
-| `bot_blocked` | website | no | a block page refusing this client or IP; resolution is tried only on a proxied challenge tier (`resolution_attempted`) |
+| `bot_challenge` | website | no | a bot challenge that was not passed by available permitted tiers (`resolution_attempted`) |
+| `bot_blocked` | website | no | a block page refusing this client or IP; local resolution then permitted proxied paid fallback (`resolution_attempted`) |
 | `redirect_loop` | website | no | the redirects don't end: a loop, or more than 10 hops |
 | `unreachable` | network | yes | no HTTP response: connection, TLS, timeout, a DNS failure not confirmed as a missing host |
 | `host_not_found` | network | no | the host (the URL's or a redirect's) doesn't exist: a resolver confirmed it has no such name (NXDOMAIN) or no address |
@@ -215,7 +219,8 @@ gateway and content failures are not.
 ### `evidence`
 
 Every step the service took, in order: path (`http`, `browser`) and tier (`direct`, `managed`,
-`challenge_resolution`), what the assessment found (reason codes and confidences from `docs/labels.md`), and why it
+`local_resolution`, `challenge_resolution`), what the assessment found (reason codes and confidences from
+`docs/labels.md`), and why it
 escalated, accepted or failed (e.g. `cache: pattern news.example.com/news/{id} HTTP-sufficient (7/7)`, or
 `canary: re-checking a cached HTTP-sufficient page`). Browser attempts carry `comparison` — how much of the rendered
 content the plain response already had, and whether that counted as sufficient. Browser attempts carry the renderer's step log (what each wait and scroll added)
@@ -249,7 +254,8 @@ per-domain evidence in Postgres; the default is in memory, or SQLite via `PAGECA
   is excluded, and `UnsupportedMediaType` before reading a successful body of a type outside `accept`.
   `HttpxFetcher` does all of this (with an optional egress `proxy`); a host rejects its egress's own error
   answers by overriding `check_hop(response)`, and adds its own network policy to the request's exclusions;
-- `BrowserTier`s — `managed` and optionally `challenge_resolution` — each rendering a URL with the adaptive
+- `BrowserTier`s — `managed`, optionally `local_resolution`, and optionally paid `challenge_resolution` —
+  each rendering a URL with the adaptive
   renderer on its own browsers, given the request's exclusions (`CdpBrowserTier` wraps any CDP endpoint).
 
 Defaults use `HttpxFetcher`, the CDP endpoint in `PAGECAPTURE_BROWSER_WS`, and for challenge resolution

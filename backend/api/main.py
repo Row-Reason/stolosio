@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager, suppress
 import nats
 from fastapi import FastAPI
 
+from backend.api.routes.admin_captures import router as admin_captures_router
 from backend.api.routes.admin_command_costs import (
     router as admin_command_costs_router,
 )
@@ -36,6 +37,7 @@ from backend.metrics import FleetSnapshotService, InstrumentedEventPublisher
 from backend.metrics.definitions import JETSTREAM_TOPOLOGY_READY, NATS_CONNECTED
 from backend.proxy.attempts import AttemptAdmission
 from backend.proxy.capture import CaptureRunner
+from backend.proxy.capture.analytics import CaptureAnalytics
 from backend.proxy.command_costs import CommandCostQueryService
 from backend.proxy.contracts import ProviderName
 from backend.proxy.costs import CostQueryService, CostRateRepository
@@ -192,6 +194,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.session_queries = SessionQueryService(session_factory)
     app.state.command_costs = CommandCostQueryService(session_factory)
     app.state.costs = CostQueryService(session_factory)
+    app.state.capture_analytics = CaptureAnalytics(session_factory)
     app.state.cost_rates = cost_rates
     app.state.activity_history = ActivityHistoryService(session_factory)
     app.state.gateway = Gateway(
@@ -222,6 +225,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title=settings.app_name, version="0.1.14", lifespan=lifespan)
 app.include_router(admin_command_costs_router)
 app.include_router(admin_costs_router)
+app.include_router(admin_captures_router)
 app.include_router(admin_events_router)
 app.include_router(admin_fleets_router)
 app.include_router(admin_network_router)

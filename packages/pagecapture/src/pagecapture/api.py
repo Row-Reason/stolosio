@@ -19,7 +19,7 @@ Outcome = Literal["captured", "failed"]
 Representation = Literal["response_body", "rendered_html"]
 FailureCategory = Literal["website", "network", "gateway", "content"]
 Path = Literal["http", "browser"]
-Tier = Literal["direct", "managed", "challenge_resolution"]
+Tier = Literal["direct", "managed", "local_resolution", "challenge_resolution"]
 
 _LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 _MEDIA_TYPE = re.compile(r"[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*")
@@ -83,7 +83,7 @@ def accepts(accept: tuple[str, ...] | None, media_type: str) -> bool:
 @dataclass
 class CaptureRequest:
     url: str
-    resolve_bot_challenges: bool = False  # may a bot challenge be resolved (a costlier tier)? set by the caller's plan
+    resolve_bot_challenges: bool = False  # permits local resolution and paid fallback
     exclusions: tuple[Exclusion, ...] = ()  # never fetched: not on any redirect hop, not by the browser
     accept: tuple[str, ...] | None = None  # media types the caller stores; anything else fails without a body
     reference: str | None = None  # caller's trace id, echoed back

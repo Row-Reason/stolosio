@@ -1,6 +1,6 @@
 """SQLAlchemy persistence models."""
 
-from backend.db.models.capture import CaptureMethodCacheEntry
+from backend.db.models.capture import CaptureMethodCacheEntry, CaptureResultRecord
 from backend.db.models.gateway import (
     AcquisitionAttempt,
     ExternalProviderLimit,
@@ -25,6 +25,7 @@ from backend.db.models.observability import (
 __all__ = [
     "AcquisitionAttempt",
     "CaptureMethodCacheEntry",
+    "CaptureResultRecord",
     "ExternalProviderLimit",
     "ExternalProviderLimitEvent",
     "Domain",

@@ -158,9 +158,23 @@ def excluded() -> CaptureResult:
     )
 
 
+def locally_resolved() -> CaptureResult:
+    result = captured()
+    first, local = result.evidence.attempts
+    first.assessment = Assessment("bot_challenge", [Reason("bot_challenge", 0.95, "rule")])
+    first.decision_reason = "bot challenge: trying local_resolution"
+    local.tier = "local_resolution"
+    local.duration_ms = 2000.0
+    local.decision_reason = "rendered content is complete (plain response had 0% of it)"
+    local.comparison = {"http_coverage": 0.0, "http_sufficient": False}
+    result.evidence.cost.browser_seconds = 2.0
+    return result
+
+
 EXAMPLES = {
     "request.json": REQUEST,
     "captured.json": captured().to_json(),
+    "captured_local_resolution.json": locally_resolved().to_json(),
     "failed_rate_limited.json": rate_limited().to_json(),
     "failed_unsupported_media_type.json": unsupported_media_type().to_json(),
     "failed_excluded.json": excluded().to_json(),

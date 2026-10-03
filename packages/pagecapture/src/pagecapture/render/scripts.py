@@ -192,7 +192,13 @@ SCROLL_STEP = """(factor) => {
 CHALLENGE_STATE = """([titles, markers]) => {
   const title = (document.title || '').toLowerCase();
   const html = document.documentElement ? document.documentElement.innerHTML.slice(0, 200000).toLowerCase() : '';
-  return {challenged: titles.some(t => title.includes(t)) || markers.some(m => html.includes(m)),
+  const text = (document.body?.innerText || '').slice(0, 10000).toLowerCase();
+  const protectedPage = /anubis|botstopper/.test(text);
+  const denied = protectedPage && /access denied|you have been blocked/.test(text);
+  const anubis = !!document.getElementById('anubis_challenge');
+  const progress = document.querySelector('progress, #progress, #status');
+  return {challenged: denied || anubis || titles.some(t => title.includes(t)) || markers.some(m => html.includes(m)),
+          denied, progress: anubis && progress ? String(progress.value ?? progress.textContent).slice(0, 200) : null,
           ready: document.readyState !== 'loading'};
 }"""
 

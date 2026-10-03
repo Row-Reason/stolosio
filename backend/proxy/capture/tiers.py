@@ -32,15 +32,16 @@ class SharedRenderer:
 
 
 class SlotTier:
-    """The managed tier: renders on the local browser slot the capture holds."""
+    """Managed rendering or local resolution on the browser slot the capture already holds."""
 
     tier = "managed"
     paid = False
     proxied = False
 
-    def __init__(self, renderer: SharedRenderer, endpoint: str) -> None:
+    def __init__(self, renderer: SharedRenderer, endpoint: str, *, local: bool = False) -> None:
         self._renderer = renderer
         self._endpoint = endpoint
+        self.tier = "local_resolution" if local else "managed"
 
     async def render(
         self, url: str, deadline_s: float, exclusions: tuple[Exclusion, ...] = ()

@@ -20,7 +20,7 @@ A session connects to the provider named by `stolosio.provider.slug`, or `browse
 
 ## Page capture
 
-`POST /v1/capture` chooses its own method: a plain HTTP fetch through the egress proxy when that proves enough, otherwise a render on the managed fleet. A request that sets `resolve_bot_challenges` may use Browserless cloud, when an operator has enabled it, to get past a bot challenge. Stolosio remembers per URL where plain HTTP was confirmed sufficient.
+`POST /v1/capture` chooses its own method: a plain HTTP fetch through the egress proxy when that proves enough, otherwise a render on the managed fleet. A request that sets `resolve_bot_challenges` first tries a bounded local browser resolution attempt for bot protection, then may use Browserless cloud, when an operator has enabled it, to get past a bot challenge. Stolosio remembers per URL where plain HTTP was confirmed sufficient.
 
 ## Paid capacity and spend
 

@@ -61,4 +61,7 @@ class Settings:
     final_read_s: float = 30.0  # reading the final DOM may wait this long for a busy page to answer
     render_cap_s: float = 60.0  # hard limit for one render, plus the tier's challenge wait
     challenge_wait_s: float = 5.0  # managed tier: a JS challenge sometimes clears by itself in a real browser
+    local_resolution_cap_s: float = 35.0  # bounded retry, leaving time for paid fallback
+    local_resolution_wait_s: float = 10.0  # stop stalled challenges promptly
+    local_resolution_progress_wait_s: float = 25.0  # extra time only while challenge progress is observed
     challenge_resolution_wait_s: float = 60.0  # challenge tier: the provider's solver needs time (5-45 s seen)

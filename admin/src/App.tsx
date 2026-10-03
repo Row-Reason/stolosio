@@ -15,6 +15,7 @@ import { type ComponentType, useEffect, useState } from "react"
 
 import { useTheme } from "@/components/theme-provider"
 import { ActivityPage } from "@/components/activity-page"
+import { CapturesPage } from "@/components/captures-page"
 import { CostPage } from "@/components/cost-page"
 import { FleetsPage } from "@/components/fleets-page"
 import { OverviewPage } from "@/components/overview-page"
@@ -48,6 +49,12 @@ const navigationItems: NavigationItem[] = [
     href: "/sessions",
     icon: CircleDot,
     description: "Search session history and inspect individual timelines.",
+  },
+  {
+    label: "Captures",
+    href: "/captures",
+    icon: ShieldCheck,
+    description: "Acquisition outcomes and challenge resolution.",
   },
   {
     label: "Cost",
@@ -249,6 +256,8 @@ export default function App() {
           <PolicyPage />
         ) : activeItem.href === "/sessions" ? (
           <SessionsPage sessionId={sessionId} navigate={navigate} />
+        ) : activeItem.href === "/captures" ? (
+          <CapturesPage />
         ) : activeItem.href === "/cost" ? (
           <CostPage navigate={navigate} />
         ) : (

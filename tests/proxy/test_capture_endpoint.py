@@ -176,6 +176,7 @@ async def runner(
     )
     runner._fetcher = FakeFetcher()
     runner._renderer = FakeRenderer()
+    runner._local_renderer = FakeRenderer(html=CHALLENGE)
     runner._cloud = FakeCloud()
     yield runner
     await runner.close()
@@ -294,6 +295,12 @@ async def test_challenge_resolution_trades_the_local_slot_for_a_cloud_attempt(
 
     assert result.outcome == "captured" and result.evidence.cost.paid
     assert runner._cloud.calls == 1
+    assert len(runner._local_renderer.calls) == 1
+    assert [a.tier for a in result.evidence.attempts] == [
+        "direct",
+        "local_resolution",
+        "challenge_resolution",
+    ]
     local, cloud = await attempts(database_sessions)
     assert (local.provider, local.state, local.terminal_reason) == (
         "browserless",
@@ -304,7 +311,7 @@ async def test_challenge_resolution_trades_the_local_slot_for_a_cloud_attempt(
 
 
 @pytest.mark.asyncio
-async def test_challenges_are_not_resolved_unless_the_caller_allows_it(runner) -> None:
+async def test_resolution_requires_caller_permission(runner) -> None:
     runner._fetcher = FakeFetcher(
         status=403,
         body=CHALLENGE,
@@ -313,6 +320,7 @@ async def test_challenges_are_not_resolved_unless_the_caller_allows_it(runner) -
     result = await runner.capture(CaptureRequest(url="https://example.test/page"))
 
     assert result.failure.code == "bot_challenge" and not result.failure.resolution_attempted
+    assert len(runner._local_renderer.calls) == 0
     assert runner._cloud.calls == 0
 
 
@@ -346,6 +354,37 @@ async def test_a_disabled_cloud_provider_means_no_challenge_tier(runner, databas
     )
 
     assert result.failure.code == "bot_challenge" and runner._cloud.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_local_resolution_reuses_the_slot_and_reports_to_the_outbox(
+    runner, database_sessions
+):
+    runner._fetcher = FakeFetcher(body=CHALLENGE)
+    runner._local_renderer = FakeRenderer()
+    result = await runner.capture(
+        CaptureRequest(url="https://example.test/local", resolve_bot_challenges=True)
+    )
+    assert result.outcome == "captured" and not result.evidence.cost.paid
+    assert runner._cloud.calls == 0
+    [local] = await attempts(database_sessions)
+    assert local.provider == "browserless" and local.state == "completed"
+    assert runner._local_renderer.calls == [
+        ("ws://browserless-test:3000", (Exclusion("blocked.test"),))
+    ]
+    async with database_sessions() as database:
+        completed = await database.scalar(
+            select(SessionEventRecord).where(SessionEventRecord.event_type == "capture.completed")
+        )
+    assert completed.payload["tiers"] == ["direct", "local_resolution"]
+    assert completed.payload["attempts"][-1] == {
+        "tier": "local_resolution",
+        "decision": "accept",
+        "status": 200,
+        "duration_ms": 2000.0,
+    }
+    assert completed.payload["browser_seconds"] == 2.0 and not completed.payload["paid"]
+    assert "example.test" not in str(completed.payload)
 
 
 # ---- the route ----
@@ -414,3 +453,30 @@ def test_no_capacity_is_503_with_retry_after_and_the_same_body_shape() -> None:
     body = response.json()
     assert body["outcome"] == "failed" and body["document"] is None
     assert body["failure"]["code"] == "capacity" and body["failure"]["transient"] is True
+
+
+@pytest.mark.asyncio
+async def test_capture_analytics_recording_is_atomic_and_idempotent(runner, database_sessions):
+    from types import SimpleNamespace
+
+    from backend.db.models import CaptureResultRecord
+    from backend.proxy.capture.analytics import CaptureAnalytics
+
+    result = await runner.capture(CaptureRequest(url="https://example.test/analytics"))
+    async with database_sessions() as db:
+        recorded = await db.scalar(select(CaptureResultRecord))
+    lease = SimpleNamespace(session=SimpleNamespace(session_id=recorded.session_id))
+    await runner._record(lease, result, 1000, False)
+    stats = await CaptureAnalytics(database_sessions).overview("24h")
+    assert stats["all_captures"]["total"] == 1
+    async with database_sessions() as db:
+        events = list(
+            await db.scalars(
+                select(SessionEventRecord).where(
+                    SessionEventRecord.event_type == "capture.completed"
+                )
+            )
+        )
+    assert len(events) == 1
+    assert events[0].payload["outcome"] == "captured"
+    assert recorded.acquisition_outcome == "default"

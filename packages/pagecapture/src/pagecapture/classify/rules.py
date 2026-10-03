@@ -333,6 +333,8 @@ BLOCK_HEADERS = ("x-amzn-waf-action: block", "Akamai 403")  # challenge_header()
 def block_page(doc: Document) -> str | None:
     """A bot-protection page that refuses this client outright (IP or fingerprint reputation), as opposed to a
     challenge a real browser can pass. Solving captchas doesn't help here; only a different identity (a proxy) might."""
+    if doc.small and has(doc.text, ("botstopper", "anubis")) and "access denied" in doc.text:
+        return "block page: bot protection access denied"
     header = challenge_header(doc)
     if header in BLOCK_HEADERS:
         return header
@@ -346,6 +348,8 @@ def bot_challenge(doc: Document, found: dict) -> Flag:
     header = challenge_header(doc)
     if header:
         return yes(0.99, header)
+    if doc.small and has(doc.text, ("botstopper", "anubis")) and "access denied" in doc.text:
+        return yes(0.99, "bot protection access denied")
     # A bare "403 Forbidden" page without challenge or block wording is only client_error.
     if (
         has(doc.title, CHALLENGE_TITLES)

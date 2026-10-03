@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -86,12 +86,20 @@ class ObservationPayload(_Payload):
     message_fingerprint: str | None = Field(default=None, max_length=64)
 
 
+class CaptureAttemptPayload(_Payload):
+    tier: Literal["direct", "managed", "local_resolution", "challenge_resolution"]
+    decision: Literal["accept", "escalate", "fail"]
+    status: int | None
+    duration_ms: float = Field(ge=0)
+
+
 class CapturePayload(_Payload):
     outcome: str = Field(max_length=16)
     failure_code: str | None = Field(default=None, max_length=64)
     failure_category: str | None = Field(default=None, max_length=16)
     representation: str | None = Field(default=None, max_length=16)
     tiers: list[Annotated[str, Field(max_length=32)]] = Field(max_length=8)
+    attempts: list[CaptureAttemptPayload] = Field(default_factory=list, max_length=8)
     duration_ms: int = Field(ge=0)
     browser_seconds: float = Field(ge=0)
     paid: bool

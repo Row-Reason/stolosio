@@ -78,13 +78,14 @@ def run(service, url="https://example.test/page", **request):
     return asyncio.run(service.capture(CaptureRequest(url=url, **request)))
 
 
-def service(fetcher, managed=None, challenge=None, cache=None):
+def service(fetcher, managed=None, challenge=None, cache=None, local=None):
     s = Settings(browser_ws=None, challenge_browser_ws=None, canary_rate=0.0)
     return CaptureService(
         s,
         fetcher=fetcher,
         managed=managed,
         challenge_resolution=challenge,
+        local_resolution=local,
         cache=cache if cache is not None else MemoryMethodCache(),
     )
 
@@ -529,3 +530,80 @@ def test_exclusions_reach_the_browser_and_an_excluded_landing_page_fails():
     r = run(service(FakeFetcher(body=APP_SHELL), managed=managed), exclusions=(rule,))
     assert managed.exclusions == (rule,)
     assert r.failure.code == "excluded" and r.document is None and r.final_url == "https://example.test/private"
+
+
+def test_local_resolution_success_avoids_paid_fallback():
+    local = FakeTier("local_resolution", ARTICLE)
+    paid = FakeTier("challenge_resolution", ARTICLE, paid=True)
+    r = run(service(FakeFetcher(body=CHALLENGE), local=local, challenge=paid), resolve_bot_challenges=True)
+    assert r.outcome == "captured" and not r.evidence.cost.paid
+    assert [a.tier for a in r.evidence.attempts] == ["direct", "local_resolution"]
+    assert local.calls == 1 and paid.calls == 0
+    assert r.evidence.cost.browser_seconds == 3.2
+
+
+@pytest.mark.parametrize("allow_paid", [False, True])
+def test_local_resolution_failure_escalates_only_when_paid_permitted(allow_paid):
+    local = FakeTier("local_resolution", CHALLENGE)
+    paid = FakeTier("challenge_resolution", ARTICLE, paid=True)
+    r = run(service(FakeFetcher(body=CHALLENGE), local=local, challenge=paid), resolve_bot_challenges=allow_paid)
+    assert local.calls == paid.calls == int(allow_paid)
+    assert r.evidence.cost.paid == allow_paid
+    assert r.outcome == ("captured" if allow_paid else "failed")
+    if not allow_paid:
+        assert not r.failure.resolution_attempted
+    else:
+        assert [a.tier for a in r.evidence.attempts] == ["direct", "local_resolution", "challenge_resolution"]
+        assert r.evidence.attempts[1].decision == "escalate"
+        assert r.evidence.cost.browser_seconds == 6.4
+
+
+def test_managed_challenge_tries_local_before_paid():
+    local = FakeTier("local_resolution", ARTICLE)
+    paid = FakeTier("challenge_resolution", ARTICLE, paid=True)
+    r = run(
+        service(FakeFetcher(body=APP_SHELL), managed=FakeTier("managed", CHALLENGE), local=local, challenge=paid),
+        resolve_bot_challenges=True,
+    )
+    assert r.outcome == "captured" and paid.calls == 0
+    assert [a.tier for a in r.evidence.attempts] == ["direct", "managed", "local_resolution"]
+
+
+def test_local_resolution_failure_cannot_loop():
+    local = FakeTier("local_resolution", CHALLENGE)
+    paid = FakeTier("challenge_resolution", CHALLENGE, paid=True)
+    r = run(service(FakeFetcher(body=CHALLENGE), local=local, challenge=paid), resolve_bot_challenges=True)
+    assert r.failure.code == "bot_challenge" and r.failure.resolution_attempted
+    assert local.calls == paid.calls == 1
+
+
+def test_local_timeout_leaves_budget_for_paid_fallback():
+    class SlowLocal(FakeTier):
+        async def render(self, url, deadline_s, exclusions=()):
+            self.calls += 1
+            assert deadline_s <= 0.01
+            await asyncio.sleep(1)
+
+    local = SlowLocal("local_resolution", CHALLENGE)
+    paid = FakeTier("challenge_resolution", ARTICLE, paid=True)
+    svc = service(FakeFetcher(body=CHALLENGE), local=local, challenge=paid)
+    svc.settings.local_resolution_cap_s = 0.01
+    r = run(svc, resolve_bot_challenges=True)
+    assert r.outcome == "captured" and local.calls == paid.calls == 1
+    assert r.evidence.attempts[1].duration_ms > 0
+    assert r.evidence.attempts[1].decision == "escalate"
+
+
+def test_local_excluded_result_never_escalates():
+    class ExcludedLocal(FakeTier):
+        async def render(self, *args, **kwargs):
+            value = await super().render(*args, **kwargs)
+            value.excluded_url = "https://blocked.test/"
+            return value
+
+    paid = FakeTier("challenge_resolution", ARTICLE, paid=True)
+    r = run(
+        service(FakeFetcher(body=CHALLENGE), local=ExcludedLocal("local_resolution", ARTICLE), challenge=paid),
+        resolve_bot_challenges=True,
+    )
+    assert r.failure.code == "excluded" and paid.calls == 0

@@ -232,3 +232,10 @@ captures, every failure and every capture with under 120 words of plain text rev
 - Captured but shouldn't have been, and fixed: a domain whose plain page and render were both empty (now
   `incomplete_content`), and a Plesk "Domain Default page" (now `parked`, with Apache, nginx and cPanel defaults).
 - No other false blocks among the failures and no other blocks among the small captures.
+
+## Local solver dataset (2026-10-03)
+
+[`data/local_solver_urls.tsv`](../data/local_solver_urls.tsv) selects 111 URLs with
+observed protection in the saved deployed runs, at most one per registrable domain.
+The [dataset notes](challenge-dataset.md) describe selection, provenance, limitations,
+and local-only testing. A plain URL list and compact evidence accompany the TSV.
