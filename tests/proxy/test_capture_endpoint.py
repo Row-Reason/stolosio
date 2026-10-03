@@ -417,8 +417,8 @@ async def test_local_resolution_reuses_the_slot_and_reports_to_the_outbox(
 
 
 class FakeRunner:
-    def __init__(self, error: Exception | None = None):
-        self.error, self.requests = error, []
+    def __init__(self, error: Exception | None = None, *, verified: bool = True):
+        self.error, self.requests, self.verified = error, [], verified
 
     async def capture(self, request):
         self.requests.append(request)
@@ -429,6 +429,9 @@ class FakeRunner:
         service = CaptureService(
             Settings(browser_ws=None, challenge_browser_ws=None, method_cache_path=None),
             fetcher=FakeFetcher(),
+            managed=SimpleNamespace(tier="managed", paid=False, render=FakeCloud().render)
+            if self.verified
+            else None,
             cache=MemoryMethodCache(),
         )
         return await service.capture(request)
@@ -441,8 +444,9 @@ def client(runner: FakeRunner) -> TestClient:
     return TestClient(app)
 
 
-def test_the_route_returns_every_capture_result_as_200() -> None:
-    fake = FakeRunner()
+@pytest.mark.parametrize("verified", [True, False])
+def test_the_route_returns_every_capture_result_as_200(verified: bool) -> None:
+    fake = FakeRunner(verified=verified)
     response = client(fake).post(
         "/v1/capture",
         json={"url": "https://example.test/page", "accept": ["text/html"], "reference": "r-1"},
@@ -450,7 +454,10 @@ def test_the_route_returns_every_capture_result_as_200() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["schema"] == "2" and body["outcome"] == "captured" and body["reference"] == "r-1"
+    assert body["schema"] == "2" and body["reference"] == "r-1"
+    assert body["outcome"] == ("captured" if verified else "failed")
+    if not verified:
+        assert body["failure"]["code"] == "browser_unavailable" and body["document"] is not None
     assert fake.requests[0].accept == ("text/html",)
 
 
