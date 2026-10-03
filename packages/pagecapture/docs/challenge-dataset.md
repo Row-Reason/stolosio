@@ -83,15 +83,17 @@ cohorts separately.
 ## Running the cohorts
 
 For local-only testing, call a development capture endpoint with
-`resolve_bot_challenges: false`. Local resolution still runs automatically:
+`resolve_bot_challenges: true` and disable the external provider in that development
+instance. This permission now gates both resolvers; the saved baseline runs predate
+that change and used the former automatic-local behavior:
 
 ```bash
 curl --fail-with-body --silent --show-error http://localhost:8411/v1/capture \
   --header 'Content-Type: application/json' \
-  --data '{"url":"https://360training.com/","resolve_bot_challenges":false}'
+  --data '{"url":"https://360training.com/","resolve_bot_challenges":true}'
 ```
 
-The existing `benchmarks/challenge.py run` command enables paid fallback. Its TSV
+The existing `benchmarks/challenge.py run` command enables challenge resolution. Its TSV
 input can be this dataset, but use that runner only when paid evaluation is intended.
 Start at low concurrency and record every capture's tiers, outcome and duration.
 Keep cases that no longer challenge in a separate result category rather than counting

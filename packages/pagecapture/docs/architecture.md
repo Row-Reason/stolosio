@@ -47,8 +47,8 @@ Wrongly accepting incomplete content (lost content) is worse than a needless ren
 3. **Decide:**
    - blocked / broken (404, 410, 401/403, 429, 5xx, parked, paywall, geo) → `failed`, with the page as evidence;
    - a non-HTML document → `captured` (`response_body`);
-   - bot challenge → **local resolution**, then paid **challenge resolution** if the request allows it; a block page
-     (`rules.block_page`: refuses the IP/fingerprint, no challenge to solve) → local resolution, then permitted
+   - bot challenge → when the request allows resolution, **local resolution**, then paid **challenge resolution**; a block page
+     (`rules.block_page`: refuses the IP/fingerprint, no challenge to solve) → permitted local resolution, then permitted
      paid resolution only when that tier is proxied; otherwise `failed: bot_blocked`;
    - looks usable → **render by default**, unless the method cache has evidence that plain HTTP is enough for this
      URL or its URL pattern (then `captured` from HTTP; a 5% canary share is rendered anyway);
@@ -59,7 +59,7 @@ Wrongly accepting incomplete content (lost content) is worse than a needless ren
    - trustworthy → **compare** with the plain response (text shingles, ad-network text excluded): if the plain
      response had ≥95% of the rendered content it is returned as verified exact bytes, else the rendered DOM; the
      outcome is recorded in the method cache;
-   - bot challenge in the managed browser → local resolution, then paid challenge resolution if allowed;
+   - bot challenge in the managed browser → permitted local resolution, then permitted paid challenge resolution;
      if the plain response was usable it is kept (headless browsers are challenged where plain fetches aren't, ~7% of random pages); else `failed:
      bot_challenge` or `bot_blocked`;
    - still empty → `failed: incomplete_content` (or the usable plain response, kept and marked unverified).
@@ -144,3 +144,6 @@ identity and allowing a bounded challenge wait. This is an initial retry impleme
 CAPTCHA solving engine. It runs regardless of paid permission, enforces local network exclusions,
 and returns the same typed `Rendered` contract for normal content validation. Attempts and browser
 seconds are reported separately; paid capacity is acquired only if local resolution does not pass.
+
+Both local and external challenge-resolution tiers require the request’s
+`resolve_bot_challenges` permission. Supplier selection remains the host’s concern.

@@ -440,11 +440,10 @@ def test_exclusions_reach_the_browser_and_an_excluded_landing_page_fails():
     assert r.failure.code == "excluded" and r.document is None and r.final_url == "https://example.test/private"
 
 
-@pytest.mark.parametrize("allow_paid", [False, True])
-def test_local_resolution_success_avoids_paid_fallback(allow_paid):
+def test_local_resolution_success_avoids_paid_fallback():
     local = FakeTier("local_resolution", ARTICLE)
     paid = FakeTier("challenge_resolution", ARTICLE, paid=True)
-    r = run(service(FakeFetcher(body=CHALLENGE), local=local, challenge=paid), resolve_bot_challenges=allow_paid)
+    r = run(service(FakeFetcher(body=CHALLENGE), local=local, challenge=paid), resolve_bot_challenges=True)
     assert r.outcome == "captured" and not r.evidence.cost.paid
     assert [a.tier for a in r.evidence.attempts] == ["direct", "local_resolution"]
     assert local.calls == 1 and paid.calls == 0
@@ -456,11 +455,11 @@ def test_local_resolution_failure_escalates_only_when_paid_permitted(allow_paid)
     local = FakeTier("local_resolution", CHALLENGE)
     paid = FakeTier("challenge_resolution", ARTICLE, paid=True)
     r = run(service(FakeFetcher(body=CHALLENGE), local=local, challenge=paid), resolve_bot_challenges=allow_paid)
-    assert local.calls == 1 and paid.calls == int(allow_paid)
+    assert local.calls == paid.calls == int(allow_paid)
     assert r.evidence.cost.paid == allow_paid
     assert r.outcome == ("captured" if allow_paid else "failed")
     if not allow_paid:
-        assert r.failure.resolution_attempted
+        assert not r.failure.resolution_attempted
     else:
         assert [a.tier for a in r.evidence.attempts] == ["direct", "local_resolution", "challenge_resolution"]
         assert r.evidence.attempts[1].decision == "escalate"

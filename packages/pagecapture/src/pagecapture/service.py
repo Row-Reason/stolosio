@@ -295,7 +295,9 @@ class CaptureService:
         return None
 
     def _next_resolution(self, request, result, block):
-        """Local resolution precedes caller-gated paid fallback; neither repeats."""
+        """Caller-gated resolution tries local before paid; neither repeats."""
+        if not request.resolve_bot_challenges:
+            return None, "challenge resolution not permitted"
         used = {a.tier for a in result.evidence.attempts}
         if self.local_resolution is not None and "local_resolution" not in used:
             return self.local_resolution, None

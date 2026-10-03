@@ -242,3 +242,24 @@ export type ProviderCostRate = {
   cost_units_per_second: number
   updated_at: string
 }
+
+export type CaptureAcquisitionOutcome = "default" | "internally_resolved" | "externally_resolved" | "total_failure"
+export type CaptureStats = {
+  total: number
+  counts: Record<CaptureAcquisitionOutcome, number>
+  rates: Record<CaptureAcquisitionOutcome, number | null>
+  local_attempts: number
+  external_attempts: number
+  paid_captures: number
+  local_seconds: number
+  external_seconds: number
+  mean_duration_ms: number | null
+}
+export type CaptureOverview = {
+  window: string
+  starts_at: string
+  ends_at: string
+  tracking_since: string | null
+  all_captures: CaptureStats
+  challenged_opt_in: CaptureStats
+}

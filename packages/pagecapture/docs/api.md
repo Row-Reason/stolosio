@@ -40,7 +40,7 @@ Content-Type: application/json
 | Field | Required | Meaning |
 |---|---|---|
 | `url` | yes | Absolute http(s) URL. |
-| `resolve_bot_challenges` | no, default `false` | Permits paid challenge-resolution fallback. Local resolution runs automatically without this flag. |
+| `resolve_bot_challenges` | no, default `false` | Permits local challenge resolution followed by paid fallback if available. Neither runs when false. |
 | `exclusions` | no, default `[]` | URLs never to fetch: `[{"host", "path_prefix"}]`, at most 1,000. `host` is exact, `*.example.com` (the domain and every subdomain) or `*`; `path_prefix` (default `/`) matches whole decoded path segments, so `/admin` covers `/admin/users` but not `/administrator`. Checked on every redirect hop of the plain fetch and for every request the browser makes, on top of the service's own network policy. |
 | `accept` | no, default any | Media types the caller stores. A successful response of any other type fails fast as `unsupported_media_type`, without its body. Error responses are still read, so a 429 or 404 fails with its own code. |
 | `reference` | no | Caller's trace id (at most 256 characters), echoed back. Not used for deduplication. |
@@ -76,7 +76,7 @@ plain HTTP ─► blocked / broken / unreachable ──────────�
     │                                        │                └─ browser added content ─► captured (rendered_html)
     │                                        └─ bot challenge ─┐
     └─ bot challenge ──────────────────────────────────────────┴─► local resolution ─► paid resolution
-       or block page                                                 (only if resolve_bot_challenges)
+       or block page                                                 (both only if resolve_bot_challenges)
 ```
 
 - **Render by default.** Raw HTML can't show everything a browser adds (on a random sample of the web, rendering
@@ -90,7 +90,7 @@ plain HTTP ─► blocked / broken / unreachable ──────────�
   pattern has ≥3 sufficient comparisons and hasn't been contradicted twice, and the plain response looks as usual
   (same size range, usable). Entries expire after 30 days without being seen. A 5% canary share of cache-approved
   captures is rendered anyway, so the evidence keeps refreshing itself.
-- Bot protection tries **local resolution** automatically when configured: a bounded native-browser retry
+- Bot protection tries **local resolution** when `resolve_bot_challenges` is true and a local tier is configured: a bounded native-browser retry
   with no external solver fee. The host supplies its own local tier; the default CDP implementation waits for
   browser-executable challenges. Images, fonts and media are permitted under the transfer cap;
   service workers remain blocked to preserve exclusions. Local fleet time still counts as cost.

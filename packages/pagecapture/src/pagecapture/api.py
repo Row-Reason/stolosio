@@ -83,7 +83,7 @@ def accepts(accept: tuple[str, ...] | None, media_type: str) -> bool:
 @dataclass
 class CaptureRequest:
     url: str
-    resolve_bot_challenges: bool = False  # permits paid fallback; local resolution is automatic
+    resolve_bot_challenges: bool = False  # permits local resolution and paid fallback
     exclusions: tuple[Exclusion, ...] = ()  # never fetched: not on any redirect hop, not by the browser
     accept: tuple[str, ...] | None = None  # media types the caller stores; anything else fails without a body
     reference: str | None = None  # caller's trace id, echoed back

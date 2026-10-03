@@ -76,7 +76,7 @@ def local_challenge_site():
             "--ip",
             "11.254.254.2",
             "--network-alias",
-            "stolosio-challenge-origin",
+            container,
             "--mount",
             f"type=bind,src={Path(__file__).with_name('challenge_origin.py').resolve()},dst=/origin.py,readonly",
             "python:3.13-alpine",
@@ -88,7 +88,7 @@ def local_challenge_site():
             assert target, f"Compose {service} must be running"
             docker("network", "connect", network, target)
             connected.append(target)
-        yield "http://stolosio-challenge-origin"
+        yield f"http://{container}"
     finally:
         for target in connected:
             subprocess.run(["docker", "network", "disconnect", network, target], check=False)
@@ -96,15 +96,27 @@ def local_challenge_site():
         subprocess.run(["docker", "network", "rm", network], check=False, capture_output=True)
 
 
-@pytest.mark.parametrize("allow_paid", [False, True])
+@pytest.mark.parametrize("allow_resolution", [False, True])
 def test_local_resolution_clears_a_browser_challenge_without_paid_fallback(
-    local_challenge_site, allow_paid
+    local_challenge_site, allow_resolution
 ):
     origin = local_challenge_site
-    result = capture(url=f"{origin}/clears/{uuid4().hex}", resolve_bot_challenges=allow_paid)
+    before = httpx.get(f"{API}/v1/admin/captures/overview").raise_for_status().json()
+    result = capture(url=f"{origin}/clears/{uuid4().hex}", resolve_bot_challenges=allow_resolution)
+    if not allow_resolution:
+        assert result["outcome"] == "failed"
+        assert not result["failure"]["resolution_attempted"]
+        assert [a["tier"] for a in result["evidence"]["attempts"]] == ["direct"]
+        return
     assert result["outcome"] == "captured", json.dumps(result)
     assert [a["tier"] for a in result["evidence"]["attempts"]] == ["direct", "local_resolution"]
     assert not result["evidence"]["cost"]["paid"]
+    after = httpx.get(f"{API}/v1/admin/captures/overview").raise_for_status().json()
+    for cohort in ("all_captures", "challenged_opt_in"):
+        assert (
+            after[cohort]["counts"]["internally_resolved"]
+            >= before[cohort]["counts"]["internally_resolved"] + 1
+        )
     assert result["evidence"]["cost"]["browser_seconds"] > 0
     assert result["evidence"]["attempts"][-1]["decision"] == "accept"
     body = base64.b64decode(result["document"]["body_base64"]).decode()
@@ -113,7 +125,7 @@ def test_local_resolution_clears_a_browser_challenge_without_paid_fallback(
         json.dumps(
             {
                 "outcome": result["outcome"],
-                "allow_paid": allow_paid,
+                "allow_resolution": allow_resolution,
                 "tiers": [a["tier"] for a in result["evidence"]["attempts"]],
                 "cost": result["evidence"]["cost"],
             }
@@ -121,22 +133,22 @@ def test_local_resolution_clears_a_browser_challenge_without_paid_fallback(
     )
 
 
-def test_local_resolution_reports_a_persistent_challenge_without_paid_permission(
+def test_challenge_resolution_is_skipped_without_permission(
     local_challenge_site,
 ):
     origin = local_challenge_site
     result = capture(url=f"{origin}/holds/{uuid4().hex}")
     assert result["outcome"] == "failed", result
     assert result["failure"]["code"] == "bot_challenge", json.dumps(result)
-    assert result["failure"]["resolution_attempted"]
-    assert [a["tier"] for a in result["evidence"]["attempts"]] == ["direct", "local_resolution"]
+    assert not result["failure"]["resolution_attempted"]
+    assert [a["tier"] for a in result["evidence"]["attempts"]] == ["direct"]
     assert not result["evidence"]["cost"]["paid"]
 
 
 @pytest.mark.parametrize("path", ["resources", "progress"])
 def test_local_resolution_allows_resources_and_progress(local_challenge_site, path):
     result = capture(
-        url=f"{local_challenge_site}/{path}/{uuid4().hex}", resolve_bot_challenges=False
+        url=f"{local_challenge_site}/{path}/{uuid4().hex}", resolve_bot_challenges=True
     )
     assert result["outcome"] == "captured", json.dumps(result)
     attempt = result["evidence"]["attempts"][-1]

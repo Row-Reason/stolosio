@@ -41,7 +41,8 @@ domain, which also catches redirect hops.
 
 ## Challenge resolution
 
-Bot challenges and bot block pages automatically try `local_resolution` on the capture's existing
+When `resolve_bot_challenges` is true, bot challenges and bot block pages first try
+`local_resolution` on the capture's existing
 local fleet slot. The initial resolver is deliberately simple: a fresh browser context using the
 browser's native user agent. Images, fonts and media are permitted, with a transfer cap;
 service workers remain blocked to preserve URL exclusions. The initial 10-second challenge wait
@@ -52,7 +53,7 @@ network policy, and returned content is re-assessed before acceptance.
 If protection holds or the local resolver is unavailable, paid fallback is allowed only when
 `resolve_bot_challenges` is true and an operator has enabled `browserless_cloud`
 (`PATCH /v1/admin/providers/browserless_cloud/capacity`; needs `BROWSERLESS_CLOUD_TOKEN`). This flag
-permits paid fallback, not the automatic local attempt. The capture trades its local slot for a
+gates both local and paid resolution. When false, neither resolver runs. The capture trades its local slot for a
 cloud attempt, counted against that provider's concurrency limit, and Browserless BrowserQL
 unblocks through a residential proxy (`BROWSERLESS_CLOUD_PROXY_COUNTRY`, default `jp`). No cloud
 capacity fails as `capacity` (transient). Provider-side navigation retains its existing exclusion
@@ -73,8 +74,9 @@ STOLOSIO_E2E=1 uv run pytest tests/e2e/test_capture_e2e.py -k local_resolution -
 The test creates a temporary Docker origin on a Docker-only public-address subnet (special-use
 addresses are correctly denied by egress). It connects the local proxy and browser to that network,
 then removes the origin and network on teardown without relaxing the firewall. It demonstrates a
-JavaScript challenge clearing locally, complete content returned with paid permission both off and
-on, and a persistent challenge failing honestly without paid permission. This verifies plumbing;
+JavaScript challenge clearing locally when resolution is enabled, complete content
+returned without paid usage, and challenges failing without any solver attempt
+when resolution is disabled. This verifies plumbing;
 it makes no claim about solving real CAPTCHA providers. Paid-fallback ordering and capacity are
 covered separately by package and Postgres integration tests.
 
@@ -89,3 +91,23 @@ covered separately by package and Postgres integration tests.
 - Metrics: `stolosio_captures_total{outcome,category}`, `stolosio_capture_rejected_total{reason}`,
   `stolosio_capture_duration_seconds{tier}`, `stolosio_capture_browser_seconds_total{tier}`,
   `stolosio_capture_paid_total`.
+
+## Acquisition analytics
+
+Stolosio records one durable, idempotent fact per completed capture, independently of
+DEBUG retention. `GET /v1/admin/captures/overview?window=7d` (also `24h`, `30d`, `90d`)
+feeds the admin Captures page. The four outcomes are `default` (normal acquisition),
+`internally_resolved`, `externally_resolved`, and `total_failure`. Successful attribution
+follows the document returned: a retained plain response stays `default` even if a
+resolver was attempted and failed. A paid attempt is supplier usage, not proof of
+external success.
+
+The overview reports counts and rates for all completed captures and for captures
+with detected bot protection and resolution enabled. It includes resolver attempt
+counts, time, paid usage and mean capture duration. Empty cohorts have null rates.
+Admission refusals and captures interrupted before completion are outside this denominator.
+Tracking starts with the new table; historical DEBUG data is not backfilled. No URL,
+page body, cookies or credentials are stored in this projection. Acquisition acceptance
+does not establish downstream usefulness; Periplus owns that assessment and its customer
+usage accounting. The public capture response retains its existing attempt evidence;
+the four analytics labels are internal to Stolosio.
