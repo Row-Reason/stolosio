@@ -11,7 +11,9 @@ from pagecapture import (
     ExcludedUrl,
     Exclusion,
     FetchError,
+    HostNotFound,
     HttpResponse,
+    RedirectLoop,
     Settings,
     UnsupportedMediaType,
 )
@@ -42,6 +44,8 @@ class FakeFetcher:
         self.headers = headers or [("Content-Type", "text/html; charset=utf-8")]
 
     async def fetch(self, url, timeout_s, exclusions=(), accept=None):
+        if isinstance(self.error, Exception):
+            raise self.error
         if self.error:
             raise FetchError(self.error)
         body = self.body.encode() if isinstance(self.body, str) else self.body
@@ -221,9 +225,36 @@ def test_not_found_is_permanent_and_rate_limit_is_transient_with_retry_after():
     assert (r.failure.code, r.failure.transient, r.failure.retry_after_seconds) == ("rate_limited", True, 30.0)
 
 
-def test_unreachable_is_a_network_failure():
-    r = run(service(FakeFetcher(error="ConnectionError: name resolution failed")))
-    assert (r.outcome, r.failure.code, r.failure.category) == ("failed", "unreachable", "network")
+def test_unreachable_is_a_transient_network_failure():
+    r = run(service(FakeFetcher(error="ConnectError: temporary failure in name resolution")))
+    assert (r.outcome, r.failure.code, r.failure.category, r.failure.transient) == (
+        "failed",
+        "unreachable",
+        "network",
+        True,
+    )
+
+
+def test_a_host_that_does_not_exist_is_a_permanent_network_failure():
+    r = run(service(FakeFetcher(error=HostNotFound("missing.example.test"))))
+    assert (r.outcome, r.failure.code, r.failure.category, r.failure.transient) == (
+        "failed",
+        "host_not_found",
+        "network",
+        False,
+    )
+    assert r.evidence.attempts[0].assessment.primary == "unreachable"
+
+
+def test_a_redirect_loop_is_a_permanent_website_failure():
+    r = run(service(FakeFetcher(error=RedirectLoop("more than 10 redirects"))))
+    assert (r.outcome, r.failure.code, r.failure.category, r.failure.transient) == (
+        "failed",
+        "redirect_loop",
+        "website",
+        False,
+    )
+    assert r.failure.retry_after_seconds is None and r.document is None
 
 
 def test_non_html_documents_are_captured_as_sent():
@@ -308,6 +339,26 @@ def test_a_busy_fleet_is_a_transient_capacity_failure():
 
     r = run(service(FakeFetcher(body=APP_SHELL), managed=Busy("managed", "")))
     assert (r.failure.code, r.failure.category, r.failure.transient) == ("capacity", "gateway", True)
+
+
+def test_a_refusing_challenge_provider_is_capacity_with_its_retry_after():
+    from pagecapture.render import BrowserCapacity
+
+    fetcher = FakeFetcher(
+        status=403, body=CHALLENGE, headers=[("Content-Type", "text/html"), ("cf-mitigated", "challenge")]
+    )
+    tier = RaisingTier(BrowserCapacity("Browserless refused (concurrency): HTTP 429", retry_after_seconds=30.0))
+    r = run(service(fetcher, challenge=tier), resolve_bot_challenges=True)
+    assert (r.failure.code, r.failure.transient, r.failure.retry_after_seconds) == ("capacity", True, 30.0)
+
+
+def test_a_challenge_provider_outage_stays_browser_unavailable():
+    fetcher = FakeFetcher(
+        status=403, body=CHALLENGE, headers=[("Content-Type", "text/html"), ("cf-mitigated", "challenge")]
+    )
+    tier = RaisingTier(RuntimeError("BrowserQL HTTP 502: Bad Gateway"))
+    r = run(service(fetcher, challenge=tier), resolve_bot_challenges=True)
+    assert (r.failure.code, r.failure.retry_after_seconds) == ("browser_unavailable", None)
 
 
 def test_browser_refused_with_an_error_status_keeps_the_usable_plain_response():
@@ -400,6 +451,47 @@ def test_an_accepted_xml_document_is_captured_as_sent():
     xml = '<?xml version="1.0"?><urlset><url><loc>https://example.test/</loc></url></urlset>'
     r = run(service(FakeFetcher(body=xml, headers=[("Content-Type", "application/xml")])), accept=HTML_ONLY)
     assert r.outcome == "captured" and r.document.media_type == "application/xml"
+
+
+URLSET = (
+    '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+    + "".join(f"<url><loc>https://example.test/p/{i}</loc></url>" for i in range(50))
+    + "</urlset>"
+)
+XML_VIEWER = (
+    "<html><body><div>This XML file does not appear to have any style information associated with it.</div>"
+    + "".join(f"<p>https://example.test/p/{i} and more words in the browser's tree view</p>" for i in range(80))
+    + "</body></html>"
+)
+
+
+@pytest.mark.parametrize("media", ["application/xml", "text/xml", "application/rss+xml"])
+def test_xml_is_returned_as_sent_and_never_rendered(media):
+    managed = FakeTier("managed", XML_VIEWER)
+    r = run(service(FakeFetcher(body=URLSET, headers=[("Content-Type", f"{media}; charset=utf-8")]), managed=managed))
+    assert r.outcome == "captured" and managed.calls == 0
+    assert r.document.representation == "response_body" and r.document.media_type == media
+    assert r.document.body == URLSET.encode()
+    assert r.evidence.attempts[-1].decision_reason == f"XML ({media}): returned as sent"
+
+
+def test_xhtml_is_still_rendered_to_verify():
+    managed = FakeTier("managed", ARTICLE)
+    r = run(service(FakeFetcher(headers=[("Content-Type", "application/xhtml+xml")]), managed=managed))
+    assert managed.calls == 1 and r.evidence.attempts[0].decision == "escalate"
+
+
+@pytest.mark.parametrize("media", ["application/xml", "text/xml"])
+def test_a_challenge_served_as_xml_is_still_classified(media):
+    fetcher = FakeFetcher(status=403, body=CHALLENGE, headers=[("Content-Type", media), ("cf-mitigated", "challenge")])
+    r = run(service(fetcher, managed=FakeTier("managed", XML_VIEWER)))
+    assert r.outcome == "failed" and r.failure.code == "bot_challenge"
+
+
+def test_a_block_page_served_as_xml_is_still_classified():
+    fetcher = FakeFetcher(status=403, body=BLOCK_PAGE, headers=[("Content-Type", "text/xml"), ("Server", "cloudflare")])
+    r = run(service(fetcher, managed=FakeTier("managed", XML_VIEWER)))
+    assert r.outcome == "failed" and r.failure.code == "bot_blocked"
 
 
 def test_an_error_page_keeps_its_failure_but_drops_an_unaccepted_body():

@@ -16,7 +16,7 @@ from pagecapture.failures import failure
 
 CONTRACT = Path(__file__).resolve().parent.parent / "contract"
 STARTED, FINISHED = "2026-09-30T09:12:03.120Z", "2026-09-30T09:12:27.201Z"
-VERSIONS = {"pagecapture": "0.2.0", "classifier": "rules", "renderer": "adaptive-4"}
+VERSIONS = {"pagecapture": "0.2.0", "classifier": "rules", "renderer": "adaptive-5"}
 HTML_ONLY = ["text/html", "application/xhtml+xml", "application/xml", "text/xml"]
 
 REQUEST = {

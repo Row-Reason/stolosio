@@ -97,6 +97,14 @@ explicit migration and deprecation plan.
 
 ## Development workflow
 
+Every repository change starts from a GitHub issue, including the maintainer's own
+work. Before changing the repository, get the issue URL or number and read its
+acceptance criteria; if there is no issue, stop and ask for one. Every pull request
+body must contain a `Closes #N` line naming that issue; the `Issue link` check enforces
+it. Only in an emergency may a maintainer apply the `emergency` label instead; the PR
+then needs an `Emergency: <reason>` line, and an issue must be logged and linked
+afterwards. See [CONTRIBUTING.md](CONTRIBUTING.md#issue-first-changes).
+
 Use Python 3.13+, async I/O, FastAPI, SQLAlchemy, Alembic, PostgreSQL, and NATS.
 Dependencies are managed with `uv`.
 

@@ -34,7 +34,9 @@ failure a few times; one that still fails refuses the capture with 503 and detai
 ## Egress and network policy
 
 The plain fetch goes through the egress proxy (`HTTP_FETCH_PROXY_URL`) only, never the API
-process's own network; the proxy's own error answers fail the capture as `unreachable`. Stolosio's
+process's own network; the proxy's own error answers (and a refused `CONNECT`) fail the capture as
+`unreachable` (transient), or as `host_not_found` (permanent) when the API's resolver confirms the
+host has no such name or no address: the proxy's DNS failure alone can be a resolver hiccup. Stolosio's
 network policy joins the request's exclusions, so a blocked domain is refused on every redirect hop
 and for every browser request (`excluded`). Browsers enforce exclusions through the CDP Fetch
 domain, which also catches redirect hops.
@@ -80,6 +82,13 @@ when resolution is disabled. This verifies plumbing;
 it makes no claim about solving real CAPTCHA providers. Paid-fallback ordering and capacity are
 covered separately by package and Postgres integration tests.
 
+External capacity refusals include Stolosio limits (`retry_after_seconds` 5), or Browserless refusing for the plan's limits — HTTP 429 or a BrowserQL
+error naming a concurrency or rate limit (Retry-After, else 30 s), HTTP 402 or an error naming a
+quota, units or billing (Retry-After, else 3600 s). Any other BrowserQL HTTP error, unreadable
+response or connection failure is an outage: `browser_unavailable`. Every BrowserQL failure logs a
+warning with its HTTP status, duration and a single-line summary of at most 200 characters with the
+token and URL queries redacted; failure messages carry the same summary.
+
 ## State and accounting
 
 - The method cache (`capture_method_cache`) remembers, per URL and URL pattern, where rendering
@@ -88,6 +97,9 @@ covered separately by package and Postgres integration tests.
 - Every capture writes a `capture.completed` outbox event: outcome, failure code and category,
   tiers used, per-attempt tier/decision/status/duration (no URLs or page data), total duration, browser
   seconds, whether a paid tier was used, bytes.
+
+- A failed capture logs a warning with its failure code, category, transience and session id;
+  never the URL or the failure message, which may carry credentials.
 - Metrics: `stolosio_captures_total{outcome,category}`, `stolosio_capture_rejected_total{reason}`,
   `stolosio_capture_duration_seconds{tier}`, `stolosio_capture_browser_seconds_total{tier}`,
   `stolosio_capture_paid_total`.

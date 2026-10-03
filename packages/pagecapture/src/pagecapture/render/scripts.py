@@ -107,10 +107,47 @@ PAGE_STATE = (
     if (r.width > 20 && r.height > 20 && cs.display !== 'none' && cs.visibility !== 'hidden'
         && !(el.innerText || el.textContent || '').trim()) pending++;
   }
+  // Text placeholders ("Loading...") standing in for main content: an app still fetching it, even when chrome
+  // (navigation, country pickers, cookie text) already shows plenty of text. Only in the h1, main content, or (without
+  // a main landmark) the largest content container, and only a whole block that says nothing else, so prose
+  // mentioning loading never counts.
+  const loadingText = /^(?:loading|now loading|loading content|ladataan|laddar|laster|indlæser|laden|wird geladen|lädt|chargement(?: en cours)?|cargando|carregando|caricamento(?: in corso)?|ładowanie|загрузка|bezig met laden|yükleniyor|読み込み中|ロード中|加载中|載入中|로딩 ?중|불러오는 ?중)\\s*(?:\\.{1,3}|…)?$/i;
+  const chrome = 'header,nav,footer,aside,[role=banner],[role=navigation],[role=contentinfo]';
+  const roots = [...document.querySelectorAll('h1,main,[role=main]')];
+  if (document.body && !document.querySelector('main,[role=main]')) {
+    let box = document.body;
+    for (let depth = 0; depth < 6; depth++) {
+      const r = box.getBoundingClientRect();
+      let best = null, area = 0;
+      for (const c of box.children) {
+        if (c.matches(chrome)) continue;
+        const cr = c.getBoundingClientRect();
+        if (cr.width * cr.height > area) { area = cr.width * cr.height; best = c; }
+      }
+      if (!best || area < 0.5 * r.width * r.height) break;
+      box = best;
+    }
+    roots.push(box);
+  }
+  const placeholders = new Set();
+  for (const root of roots) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const own = n.data.trim();
+      if (!own || own.length > 40 || !loadingText.test(own)) continue;
+      let el = n.parentElement;  // the block the text sits in: inline words inside a sentence are prose
+      while (el && el !== root && getComputedStyle(el).display.startsWith('inline')) el = el.parentElement;
+      if (!el || placeholders.has(el) || (root.tagName !== 'H1' && el.closest(chrome))) continue;
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+      if (r.width > 0 && r.height > 0 && cs.visibility !== 'hidden'
+          && loadingText.test((el.innerText || '').trim().replace(/\\s+/g, ' '))) placeholders.add(el);
+    }
+  }
+  pending += placeholders.size;
   // bytes transferred as the page itself saw them (cross-origin resources without Timing-Allow-Origin report 0)
   const nav = performance.getEntriesByType('navigation')[0];
   const bytes = performance.getEntriesByType('resource').reduce((a, e) => a + (e.transferSize || 0), nav ? nav.transferSize : 0);
-  return {chars: text.length, mount, pending, bytes};
+  return {chars: text.length, mount, pending, placeholders: placeholders.size, bytes};
 }"""
 )
 

@@ -22,8 +22,10 @@ from .adapters import (
     ExcludedUrl,
     Fetcher,
     FetchError,
+    HostNotFound,
     HttpResponse,
     HttpxFetcher,
+    RedirectLoop,
     UnsupportedMediaType,
     media_type,
 )
@@ -33,6 +35,7 @@ from .classify import Classifier, rules
 from .compare import coverage, http_windows
 from .config import Settings
 from .document import Document as ParsedPage
+from .document import is_xml
 from .fetch import Fetched, make_response
 from .labels import RENDER_NEED, Verdict
 from .render import RENDERER_VERSION, BrowserCapacity, Rendered
@@ -153,7 +156,15 @@ class CaptureService:
             result.evidence.attempts.append(
                 Attempt("http", "direct", None, elapsed_ms(), Assessment(primary="unreachable"), "fail", str(e))
             )
-            result.failure = failures.failure("unreachable", str(e))
+            result.failure = failures.failure(
+                "host_not_found" if isinstance(e, HostNotFound) else "unreachable", str(e)
+            )
+            return self._finish(result)
+        except RedirectLoop as e:
+            result.evidence.attempts.append(
+                Attempt("http", "direct", None, elapsed_ms(), Assessment(primary="unreachable"), "fail", str(e))
+            )
+            result.failure = failures.failure("redirect_loop", str(e))
             return self._finish(result)
         except ExcludedUrl as e:
             result.evidence.attempts.append(
@@ -184,6 +195,10 @@ class CaptureService:
         result.evidence.attempts.append(attempt)
         reason = verdict.reason
 
+        if (reason is None or reason in ESCALATE_TO_BROWSER) and is_xml(http_doc.media_type):
+            # A browser would replace XML with its XML viewer page: return the bytes as sent, never render them.
+            attempt.decision_reason = f"XML ({http_doc.media_type}): returned as sent"
+            return self._captured(result, http_doc)
         if reason is None:
             # Looks usable, but raw HTML can't show everything a browser would add: render by default, skip only
             # on evidence that plain HTTP is enough here (cache), except for a canary share that re-checks it.
@@ -403,7 +418,11 @@ class CaptureService:
             if http_usable:
                 return self._keep_http(result, http_doc, "no browser capacity" if busy else "browser unavailable")
             result.document = http_doc
-            result.failure = failures.failure("capacity" if busy else "browser_unavailable", repr(e)[:300])
+            result.failure = failures.failure(
+                "capacity" if busy else "browser_unavailable",
+                repr(e)[:300],
+                getattr(e, "retry_after_seconds", None) if busy else None,
+            )
             return self._finish(result)
         cost = result.evidence.cost
         cost.browser_seconds += rendered.seconds

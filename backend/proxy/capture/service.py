@@ -203,6 +203,15 @@ class CaptureRunner:
                 replace(request, exclusions=exclusions, deadline_ms=remaining_ms)
             )
             failed, reason = False, "capture_completed"
+            if result.failure is not None:
+                # Never the message: it may carry the URL, and a URL may carry credentials.
+                logger.warning(
+                    "Capture failed: code=%s category=%s transient=%s session=%s",
+                    result.failure.code,
+                    result.failure.category,
+                    result.failure.transient,
+                    session.session.session_id,
+                )
             return result
         except asyncio.CancelledError:
             reason = "client_disconnected"
@@ -248,7 +257,10 @@ class CaptureRunner:
                         replacement_for=capture.slot.attempt.attempt_id,
                     )
             except (ProviderQueueFull, ProviderQueueTimeout, TimeoutError) as error:
-                raise BrowserCapacity(f"no Browserless cloud capacity: {error!r}") from error
+                raise BrowserCapacity(
+                    f"no Browserless cloud capacity: {error!r}",
+                    retry_after_seconds=RETRY_AFTER_SECONDS,
+                ) from error
             # The local slot is done: nothing renders locally after challenge resolution.
             await self._bounded(
                 capture.slot.release(failed=False, reason="challenge_resolution"),

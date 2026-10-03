@@ -35,7 +35,9 @@ Wrongly accepting incomplete content (lost content) is worse than a needless ren
 
 ## The ladder (`service.py`)
 
-1. **Plain HTTP** through the host's fetcher. No response → `failed: unreachable` (network).
+1. **Plain HTTP** through the host's fetcher. No response → `failed: unreachable` (network, transient), or
+   `host_not_found` (network, permanent) when a resolver confirms the host doesn't exist; redirects that don't end →
+   `failed: redirect_loop` (website, permanent).
 2. **Classify** the response with **rules** (`classify/`), reasons in priority order: status codes, content type,
    vendor challenge headers and markup, login redirects, explicit block / parking / maintenance wording, and
    near-certain app-shell evidence (an empty framework mount, a JavaScript notice). Status, header and redirect
@@ -84,8 +86,8 @@ Wrongly accepting incomplete content (lost content) is worse than a needless ren
   page's scripts) and the requests in flight. A page with no DOM changes and nothing loading for 0.3 s is settled;
   a busy page whose trackers never go quiet is settled when its content stops growing. Snapshots are taken only
   when the DOM changed, and send only lines not reported before.
-- Pages still nearly empty, or with an empty app container, are apps still starting: keep waiting while content
-  arrives.
+- Pages still nearly empty, with an empty app container, or whose main content or h1 still shows a text
+  placeholder ("Loading...", in several languages) are apps still starting: keep waiting while content arrives.
 - Close obvious consent dialogs with reject / necessary-only (never "accept all").
 - Scroll a screen at a time to the bottom — the window, or the inner panel that scrolls — crossing empty stretches
   with a 10-screen window; give late sections a moment at the bottom; one last wait for visible placeholders.

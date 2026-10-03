@@ -325,6 +325,21 @@ async def test_resolution_requires_caller_permission(runner) -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_failed_capture_logs_its_code_and_category_but_not_the_url(runner, caplog) -> None:
+    runner._fetcher = FakeFetcher(status=404, body="<html><title>404 Not Found</title></html>")
+    with caplog.at_level("WARNING", logger="backend.proxy.capture.service"):
+        result = await runner.capture(
+            CaptureRequest(url="https://user:secret@example.test/missing?token=abc")
+        )
+
+    assert result.failure.code == "not_found"
+    [record] = [r for r in caplog.records if r.getMessage().startswith("Capture failed")]
+    message = record.getMessage()
+    assert "code=not_found category=website transient=False" in message
+    assert "example.test" not in message and "secret" not in message
+
+
+@pytest.mark.asyncio
 async def test_a_disabled_cloud_provider_means_no_challenge_tier(runner, database_sessions) -> None:
     await ExternalCapacityRepository(database_sessions).update(
         ProviderName.BROWSERLESS_CLOUD, {"enabled": False}, actor="test"
