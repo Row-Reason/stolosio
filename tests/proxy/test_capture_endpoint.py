@@ -463,4 +463,5 @@ async def test_capture_analytics_recording_is_atomic_and_idempotent(runner, data
             )
         )
     assert len(events) == 1
-    assert events[0].payload["acquisition_outcome"] == "default"
+    assert events[0].payload["outcome"] == "captured"
+    assert recorded.acquisition_outcome == "default"

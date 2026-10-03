@@ -94,15 +94,6 @@ class CaptureAttemptPayload(_Payload):
 
 
 class CapturePayload(_Payload):
-    acquisition_outcome: Literal[
-        "default", "internally_resolved", "externally_resolved", "total_failure"
-    ]
-    resolution_enabled: bool
-    challenge_detected: bool
-    local_attempted: bool
-    external_attempted: bool
-    local_seconds: float = Field(ge=0)
-    external_seconds: float = Field(ge=0)
     outcome: str = Field(max_length=16)
     failure_code: str | None = Field(default=None, max_length=64)
     failure_category: str | None = Field(default=None, max_length=16)

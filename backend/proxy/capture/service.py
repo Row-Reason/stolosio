@@ -272,7 +272,6 @@ class CaptureRunner:
         payload = validate_payload(
             EventType.CAPTURE_COMPLETED,
             {
-                **capture_facts(result, resolution_enabled, duration_ms),
                 "outcome": result.outcome,
                 "failure_code": failure.code if failure else None,
                 "failure_category": failure.category if failure else None,
