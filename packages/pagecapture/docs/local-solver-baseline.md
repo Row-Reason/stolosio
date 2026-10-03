@@ -92,7 +92,7 @@ results; there were no harness errors or unresolved capacity refusals.
 Dataset SHA-256 (`local_solver_urls.txt`):
 `4a86067ec53db3f733d8b16b37ba0829d582f5f2aa4633e05ae46cb3a89577cd`.
 
-## Next experiments
+## Experiments proposed before the second run
 
 These are hypotheses to test, not demonstrated improvements. The
 [expanded cohort](challenge-dataset.md#periplus-expansion--2026-10-03) adds 30
@@ -128,5 +128,6 @@ coverage so error pages cannot inflate the score. Measure accepted target conten
 new successes/lost successes, repeatability, transfer bytes and latency. Run the
 original cohort with paid fallback disabled under the same egress conditions.
 The 55 challenge failures are the first experiment targets; the 30 hard bot blocks
-should be reported separately. No improvement implementation or rerun is included
-in this dataset expansion.
+should be reported separately. Both experiments have now been implemented and
+the expanded cohort run; see [the second-run report](local-solver-v2-baseline.md)
+for measured results and the service-worker exclusion constraint.

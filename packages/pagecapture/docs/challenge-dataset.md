@@ -75,9 +75,10 @@ cases came from completed small feeds. Production was read through MCP only;
 no captures, crawls, paid solves or configuration changes were initiated.
 
 The original files remain frozen so the [7.5% baseline](local-solver-baseline.md)
-continues to refer to its original cohort. The 30 additions have not yet been
-benchmarked locally. Use the expanded files for future coverage runs and report
-the original and added cohorts separately.
+continues to refer to its original cohort. All 141 cases have now been run locally
+with the two solver experiments; see the [experiment results](local-solver-v2-baseline.md).
+Use the expanded files for future coverage runs and report the original and added
+cohorts separately.
 
 ## Running the cohorts
 
