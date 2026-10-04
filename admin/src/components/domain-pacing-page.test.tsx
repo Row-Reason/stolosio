@@ -122,6 +122,7 @@ it("shows adjustment history, honest missing measurements, and surfaces reset er
   vi.stubGlobal("fetch", fetch)
   mount("en.wikipedia.org")
   await screen.findByText("Occupied / allowed now")
+  expect(screen.getByText(/reduces spacing by 20%/)).toBeTruthy()
   expect(screen.getByText("Healthy responses near allowance")).toBeTruthy()
   expect(
     screen.getByText(/Traffic measurement starts with the next capture/)

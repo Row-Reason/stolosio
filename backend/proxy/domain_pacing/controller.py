@@ -58,7 +58,7 @@ def update(
         ):
             concurrency = min(settings.maximum_concurrency, concurrency + 1)
         else:
-            spacing = max(settings.minimum_spacing_seconds, round(spacing * 0.9, 6))
+            spacing = max(settings.minimum_spacing_seconds, round(spacing * 0.8, 6))
         changed = concurrency != policy.concurrency or spacing != policy.spacing_seconds
         return replace(
             policy,

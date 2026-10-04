@@ -14,7 +14,7 @@ class PacingSettings(BaseModel):
     minimum_spacing_seconds: float = Field(default=0.1, ge=0.01, le=60)
     maximum_spacing_seconds: float = Field(default=60, ge=0.01, le=3600)
     learned_ttl_seconds: int = Field(default=86400, ge=60, le=2592000)
-    healthy_samples: int = Field(default=20, ge=2, le=1000)
+    healthy_samples: int = Field(default=10, ge=2, le=1000)
     overload_samples: int = Field(default=3, ge=2, le=100)
     cooldown_seconds: int = Field(default=30, ge=1, le=3600)
 

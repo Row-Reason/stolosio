@@ -411,7 +411,7 @@ function HostDetails({
             <p className="mt-3 text-xs text-muted-foreground">
               Concurrency pressure: {concurrency} samples; at least {needed}{" "}
               required for a concurrency increase. Otherwise the next increase
-              reduces spacing by 10%, within configured bounds.
+              reduces spacing by 20%, within configured bounds.
             </p>
           </div>
           <dl className="grid grid-cols-2 gap-2 text-sm">
