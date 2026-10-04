@@ -1,0 +1,28 @@
+{
+  "schema": "2",
+  "reference": null,
+  "outcome": "failed",
+  "requested_url": "https://example.com/article",
+  "final_url": "https://example.com/article",
+  "started_at": "2026-10-04T00:00:00Z",
+  "finished_at": "2026-10-04T00:00:00Z",
+  "response": null,
+  "document": null,
+  "failure": {
+    "code": "domain_throttled",
+    "category": "gateway",
+    "transient": true,
+    "message": "domain_cooldown",
+    "retry_after_seconds": 30,
+    "resolution_attempted": null
+  },
+  "evidence": {
+    "attempts": [],
+    "cost": {
+      "browser_seconds": 0.0,
+      "paid": false,
+      "bytes": 0
+    },
+    "versions": {}
+  }
+}

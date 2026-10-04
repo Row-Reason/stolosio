@@ -1,6 +1,12 @@
 """SQLAlchemy persistence models."""
 
 from backend.db.models.capture import CaptureMethodCacheEntry, CaptureResultRecord
+from backend.db.models.domain_pacing import (
+    DomainPacingLease,
+    DomainPacingRequest,
+    DomainPacingSettings,
+    DomainPacingState,
+)
 from backend.db.models.gateway import (
     AcquisitionAttempt,
     ExternalProviderLimit,
@@ -26,6 +32,10 @@ __all__ = [
     "AcquisitionAttempt",
     "CaptureMethodCacheEntry",
     "CaptureResultRecord",
+    "DomainPacingLease",
+    "DomainPacingRequest",
+    "DomainPacingSettings",
+    "DomainPacingState",
     "ExternalProviderLimit",
     "ExternalProviderLimitEvent",
     "Domain",

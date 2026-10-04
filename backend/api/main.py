@@ -13,6 +13,7 @@ from backend.api.routes.admin_command_costs import (
     router as admin_command_costs_router,
 )
 from backend.api.routes.admin_costs import router as admin_costs_router
+from backend.api.routes.admin_domain_pacing import router as admin_domain_pacing_router
 from backend.api.routes.admin_events import router as admin_events_router
 from backend.api.routes.admin_fleets import router as admin_fleets_router
 from backend.api.routes.admin_network import router as admin_network_router
@@ -44,6 +45,7 @@ from backend.proxy.capture.analytics import CaptureAnalytics
 from backend.proxy.command_costs import CommandCostQueryService
 from backend.proxy.contracts import ProviderName
 from backend.proxy.costs import CostQueryService, CostRateRepository
+from backend.proxy.domain_pacing import DomainPacing, PacingRepository
 from backend.proxy.external_capacity import ExternalCapacityRepository
 from backend.proxy.gateway import Gateway
 from backend.proxy.network_policy import NetworkPolicyRepository
@@ -177,6 +179,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await cost_rates.ensure_defaults()
     network_policy = NetworkPolicyRepository(session_factory)
     await network_policy.ensure_defaults()
+    domain_pacing = DomainPacing(PacingRepository(session_factory))
+    await domain_pacing.repository.settings()
     notifier = DynamicCapacityNotifier()
     event_publisher = DynamicEventPublisher()
     app.state.nats_connected = False
@@ -216,7 +220,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         external_capacity,
         session_factory,
         settings,
+        domain_pacing=domain_pacing,
     )
+    app.state.domain_pacing = domain_pacing
     try:
         yield
     finally:
@@ -236,6 +242,7 @@ app = FastAPI(
 )
 app.include_router(admin_command_costs_router)
 app.include_router(admin_costs_router)
+app.include_router(admin_domain_pacing_router)
 app.include_router(admin_captures_router)
 app.include_router(admin_events_router)
 app.include_router(admin_fleets_router)

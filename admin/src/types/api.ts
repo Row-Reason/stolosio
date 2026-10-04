@@ -1,4 +1,9 @@
-import type { CapturePath, CaptureTier, CaptureDecisionCode, CaptureDecision } from "./contracts"
+import type {
+  CapturePath,
+  CaptureTier,
+  CaptureDecisionCode,
+  CaptureDecision,
+} from "./contracts"
 
 export type ApiErrorResponse = {
   detail?: string
@@ -248,13 +253,45 @@ export type NetworkPolicyUpdate = {
   blocked_domain_patterns: string[]
 }
 
+export type DomainPacingSettings = {
+  default_concurrency: number
+  default_spacing_seconds: number
+  maximum_concurrency: number
+  minimum_spacing_seconds: number
+  maximum_spacing_seconds: number
+  learned_ttl_seconds: number
+  healthy_samples: number
+  overload_samples: number
+  cooldown_seconds: number
+  version: number
+}
+
+export type DomainPacingState = {
+  hostname: string
+  concurrency: number
+  spacing_seconds: number
+  effective_concurrency: number
+  effective_spacing_seconds: number
+  active_captures: number
+  expires_at: string
+  cooldown_until: string | null
+  healthy_samples: number
+  concurrency_samples: number
+  overload_samples: number
+  generation: number
+  reason: string
+  adjusted_at: string | null
+  expired: boolean
+}
+
 export type ProviderCostRate = {
   provider: ActivityProvider
   cost_units_per_second: number
   updated_at: string
 }
 
-export type CaptureAcquisitionOutcome = "default" | "internally_resolved" | "externally_resolved" | "total_failure"
+export type CaptureAcquisitionOutcome =
+  "default" | "internally_resolved" | "externally_resolved" | "total_failure"
 export type CaptureStats = {
   total: number
   counts: Record<CaptureAcquisitionOutcome, number>
@@ -335,4 +372,56 @@ export type OperationsOverview = {
   ends_at: string
   automation: AutomationOverview
   capture: CaptureOverview
+}
+
+export type PacingWindow = "1h" | "24h" | "7d"
+export type PacingTraffic = {
+  offered: number
+  admitted: number
+  refusals: Record<string, number>
+}
+export type PacingDomain = DomainPacingState & {
+  reset_requested: boolean
+  traffic: PacingTraffic
+  offered_per_second: number
+  admitted_per_second: number
+}
+export type PacingBucket = {
+  at: string
+  offered_per_second: number
+  admitted_per_second: number
+  refusals: Record<string, number>
+  peak_active: number | null
+  maximum_allowance: number | null
+  minimum_spacing_seconds: number | null
+  origin_throttled: number
+  origin_overload: number
+  mean_capture_seconds: number | null
+}
+export type PacingDashboard = {
+  window: PacingWindow
+  starts_at: string
+  ends_at: string
+  tracking_since: string | null
+  settings: DomainPacingSettings
+  domains: PacingDomain[]
+  totals: PacingTraffic & {
+    origin_throttled: number
+    origin_overload: number
+    mean_capture_seconds: number | null
+    active_hosts: number
+    cooldown_hosts: number
+    throttled_hosts: number
+  }
+  series: PacingBucket[]
+  history: {
+    at: string
+    hostname: string
+    concurrency: number
+    spacing_seconds: number
+    generation: number
+    reason: string
+  }[]
+  bucket_seconds: number
+  domains_truncated: boolean
 }

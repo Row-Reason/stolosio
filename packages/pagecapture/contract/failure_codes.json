@@ -59,6 +59,10 @@
     "category": "gateway",
     "transient": true
   },
+  "domain_throttled": {
+    "category": "gateway",
+    "transient": true
+  },
   "browser_unavailable": {
     "category": "gateway",
     "transient": true

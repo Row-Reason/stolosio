@@ -18,6 +18,11 @@ import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
+const DomainPacingPage = lazy(() =>
+  import("@/components/domain-pacing-page").then((module) => ({
+    default: module.DomainPacingPage,
+  }))
+)
 const CapturesPage = lazy(() =>
   import("@/components/captures-page").then((module) => ({
     default: module.CapturesPage,
@@ -81,6 +86,12 @@ const navigationItems: NavigationItem[] = [
     description: "Page acquisition outcomes and evidence.",
   },
   {
+    label: "Domain pacing",
+    href: "/captures/pacing",
+    icon: Gauge,
+    description: "Learned destination allowances and capture demand.",
+  },
+  {
     label: "Usage",
     href: "/cost",
     icon: Coins,
@@ -135,9 +146,11 @@ export default function App() {
   }
 
   const activeItem =
-    navigationItems.find(
-      ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
-    ) ?? navigationItems[0]
+    [...navigationItems]
+      .reverse()
+      .find(
+        ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
+      ) ?? navigationItems[0]
   const fleetProvider = pathname.startsWith("/fleets/")
     ? pathname.slice("/fleets/".length)
     : undefined
@@ -197,8 +210,7 @@ export default function App() {
           </p>
           <ul className="space-y-1">
             {navigationItems.map(({ href, icon: Icon, label }) => {
-              const isActive =
-                pathname === href || pathname.startsWith(`${href}/`)
+              const isActive = activeItem.href === href
 
               return (
                 <li key={href}>
@@ -272,6 +284,17 @@ export default function App() {
             <SessionsPage sessionId={sessionId} navigate={navigate} />
           ) : activeItem.href === "/captures" ? (
             <CapturesPage sessionId={captureId} navigate={navigate} />
+          ) : activeItem.href === "/captures/pacing" ? (
+            <DomainPacingPage
+              hostname={
+                pathname.startsWith("/captures/pacing/")
+                  ? decodeURIComponent(
+                      pathname.slice("/captures/pacing/".length)
+                    )
+                  : undefined
+              }
+              navigate={navigate}
+            />
           ) : activeItem.href === "/cost" ? (
             <CostPage navigate={navigate} />
           ) : null}

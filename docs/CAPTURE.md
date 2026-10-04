@@ -17,11 +17,17 @@ Content-Type: application/json
 | --- | --- |
 | 200 | Every capture result, `captured` or `failed` |
 | 400 | An invalid request, including a `url` its own exclusions cover |
+| 429 + `Retry-After` | Shared hostname pacing refusal; a `failed` result with transient gateway failure `domain_throttled` |
 | 503 + `Retry-After` | No capacity to start the capture, or a database conflict that outlasted retries; the body is a `failed` result with failure code `capacity` |
 
 There is no authentication: the endpoint is for callers inside the deployment's network.
 
 ## Capacity
+
+Shared [domain pacing](DOMAIN_PACING.md) permits two captures per hostname with one second
+between starts by default, across all callers and replicas. Limits learn from healthy traffic
+and target refusals and expire by TTL. Callers retain crawl scheduling and retries. This limits
+captures, not each request inside them; CDP sessions are unaffected.
 
 A capture consumes global logical-session capacity before it fetches HTTP. It acquires
 one local `browserless` slot only when verification, managed rendering, or local challenge
@@ -112,7 +118,8 @@ success because a browser attempt failed, and failed verification adds no method
 - The method cache (`capture_method_cache`) remembers, per URL and URL pattern, where rendering
   confirmed that plain HTTP is enough. Evidence updates are atomic; contradicted exact URLs
   require rendering until their evidence expires. Keys preserve the origin, path and raw query.
-  Clear development method-cache entries when updating to the origin-aware key format. It is the only thing Stolosio learns about sites; the
+  Clear development method-cache entries when updating to the origin-aware key format. Domain
+  pacing learns shared acquisition allowances separately; the
   maintenance worker purges entries unseen for `CAPTURE_METHOD_CACHE_RETENTION_DAYS` (30).
 - Every capture writes a `capture.completed` outbox event: outcome, failure code and category,
   tiers used, duration, browser seconds, whether a paid tier was used, bytes, and bounded

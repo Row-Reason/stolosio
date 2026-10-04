@@ -146,12 +146,20 @@ function CaptureList({ navigate }: { navigate: (href: string) => void }) {
             evidence.
           </p>
         </div>
-        <WindowPicker
-          value={period}
-          onChange={(value) => {
-            setPeriod(value)
-          }}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={() => navigate("/captures/pacing")}
+          >
+            Domain pacing
+          </Button>
+          <WindowPicker
+            value={period}
+            onChange={(value) => {
+              setPeriod(value)
+            }}
+          />
+        </div>
       </div>
       {data ? (
         <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

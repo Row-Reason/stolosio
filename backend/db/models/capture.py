@@ -10,7 +10,7 @@ from backend.db.session import Base
 
 class CaptureMethodCacheEntry(Base):
     """pagecapture's method cache: per URL and URL pattern, whether plain HTTP proved enough. The
-    only thing Stolosio remembers about sites."""
+    evidence for selecting the acquisition method, separate from shared pacing."""
 
     __tablename__ = "capture_method_cache"
     __table_args__ = (Index("ix_capture_method_cache_last_seen", "last_seen"),)
