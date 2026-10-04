@@ -554,6 +554,66 @@ def test_an_accepted_xml_document_is_captured_as_sent():
     assert r.outcome == "captured" and r.document.media_type == "application/xml"
 
 
+@pytest.mark.parametrize("media", ["application/json", "text/json", "application/ld+json",
+                                  "application/vnd.api+json", "model/gltf+json"])
+@pytest.mark.parametrize("body", [b'{"id":900719925474099312345,"id":2}', b'[null,1,"x"]',
+                                 b")]}'\n{\"jobs\":[]}", b'while(1);{"x":1}', b'{"invalid":'])
+def test_json_returns_exact_bytes_without_html_classification_or_rendering(media, body):
+    managed = FakeTier("managed", ARTICLE)
+    instance = service(FakeFetcher(body=body, headers=[("Content-Type", media)]), managed=managed)
+    instance.classifier.classify = lambda _: pytest.fail("JSON reached HTML classification")
+    result = run(instance, accept=("application/json", "text/json", "*/*+json"))
+    assert result.outcome == "captured" and managed.calls == 0
+    assert result.document.body == body and result.document.representation == "response_body"
+    assert result.document.media_type == media
+    assert len(result.evidence.attempts) == 1
+
+
+@pytest.mark.parametrize("headers", [[("Content-Type", "text/plain")], [("Server", "test")]])
+@pytest.mark.parametrize("body", [b' {"jobs":[]}', b'[1,2]', b")]}'\n{\"x\":1}", b'\xef\xbb\xbf{"x":1}'])
+def test_untyped_and_plain_json_are_sniffed_without_changing_bytes(headers, body):
+    result = run(service(FakeFetcher(body=body, headers=headers)), accept=("application/json",))
+    assert result.outcome == "captured"
+    assert result.document.media_type == "application/json" and result.document.body == body
+    assert result.response.headers == headers
+
+
+@pytest.mark.parametrize("body", [b'{"incomplete":', b'ordinary text', b'{"x":NaN}',
+                                 b'[' * 129 + b'0' + b']' * 129])
+def test_untyped_invalid_or_excessively_nested_json_is_not_promoted(body):
+    result = run(service(FakeFetcher(body=body, headers=[("Content-Type", "text/plain")])),
+                 accept=("application/json",))
+    assert result.failure.code == "unsupported_media_type" and result.document is None
+
+
+@pytest.mark.parametrize("status,code", [(404, "not_found"), (429, "rate_limited"), (503, "website_error")])
+def test_json_http_failures_keep_their_website_meaning(status, code):
+    result = run(service(FakeFetcher(status=status, body=b'{"error":"x"}',
+                                    headers=[("Content-Type", "application/json"), ("Retry-After", "30")])))
+    assert result.outcome == "failed" and result.failure.code == code
+    assert result.document.body == b'{"error":"x"}'
+    if status == 429:
+        assert result.failure.retry_after_seconds == 30
+
+
+def test_empty_json_is_an_incomplete_response():
+    result = run(service(FakeFetcher(body=b' \n', headers=[("Content-Type", "application/json")])))
+    assert result.failure.code == "incomplete_content" and result.document is None
+
+
+@pytest.mark.parametrize("media", ["application/json", "text/plain"])
+def test_capped_json_never_renders_or_returns_partial_exact_bytes(media):
+    class CappedFetcher(FakeFetcher):
+        async def fetch(self, *args, **kwargs):
+            response = await super().fetch(*args, **kwargs)
+            response.truncated = True
+            return response
+    managed = FakeTier("managed", ARTICLE)
+    result = run(service(CappedFetcher(body=b'{"jobs":[', headers=[("Content-Type", media)]), managed=managed))
+    assert result.failure.code == "incomplete_content" and result.document is None
+    assert managed.calls == 0
+
+
 URLSET = (
     '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
     + "".join(f"<url><loc>https://example.test/p/{i}</loc></url>" for i in range(50))

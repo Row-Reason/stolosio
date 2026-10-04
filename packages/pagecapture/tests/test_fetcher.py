@@ -88,6 +88,17 @@ def test_error_responses_are_read_whatever_their_media_type():
     assert r.status_code == 429 and r.body == b'{"error": 1}' and r.retry_after_seconds() == 30
 
 
+def test_suffix_json_and_sniffable_plain_bodies_are_read_under_the_same_cap():
+    for media in ("application/vnd.api+json", "text/plain"):
+        site = Site({"/": (200, [("content-type", media)], b'{"id":1}')})
+        response = fetch(site, accept=("application/json", "application/*+json"))
+        assert response.body == b'{"id":1}'
+    site = Site({"/": (200, [("content-type", "text/plain")], b'{"id":1}')})
+    with pytest.raises(UnsupportedMediaType):
+        fetch(site, accept=("text/html",))
+    assert site.streams[0].read == 0
+
+
 def test_the_body_stops_at_the_size_cap():
     site = Site({"/": (200, HTML, b"x" * 50_000)})
     r = fetch(site, settings=Settings(http_max_response_bytes=10_000))

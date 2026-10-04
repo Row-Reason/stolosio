@@ -27,6 +27,7 @@ Tier = Literal["direct", "managed", "local_resolution", "challenge_resolution"]
 
 _LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 _MEDIA_TYPE = re.compile(r"[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*")
+_SUFFIX_RANGE = re.compile(r"(?:[a-z0-9][a-z0-9!#$&^_.+-]*|\*)/\*\+[a-z0-9][a-z0-9!#$&^_.+-]*")
 
 
 def _normalized_path(value: str) -> str:
@@ -81,7 +82,17 @@ def excluded(url: str, exclusions: "tuple[Exclusion, ...] | list[Exclusion]") ->
 
 def accepts(accept: tuple[str, ...] | None, media_type: str) -> bool:
     """Does the caller store this media type? None accepts any."""
-    return accept is None or media_type in accept
+    if accept is None or media_type in accept:
+        return True
+    family, _, subtype = media_type.partition('/')
+    for entry in accept:
+        if not _SUFFIX_RANGE.fullmatch(entry):
+            continue
+        accepted_family, accepted_subtype = entry.split('/', 1)
+        suffix = accepted_subtype[1:]
+        if accepted_family in ('*', family) and subtype.endswith(suffix) and len(subtype) > len(suffix):
+            return True
+    return False
 
 
 @dataclass
@@ -118,8 +129,8 @@ class CaptureRequest:
             if not isinstance(accept, list) or not accept or not all(isinstance(a, str) for a in accept):
                 raise ValueError("accept must be a non-empty list of media types")
             accept = tuple(dict.fromkeys(a.strip().lower() for a in accept))
-            if not all(_MEDIA_TYPE.fullmatch(a) for a in accept):
-                raise ValueError("accept entries must be media types such as text/html")
+            if not all(_MEDIA_TYPE.fullmatch(a) or _SUFFIX_RANGE.fullmatch(a) for a in accept):
+                raise ValueError("accept entries must be media types or suffix ranges such as application/*+json")
         reference = data.get("reference")
         if reference is not None and (not isinstance(reference, str) or len(reference) > 256):
             raise ValueError("reference must be a string of at most 256 characters")

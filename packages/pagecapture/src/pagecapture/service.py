@@ -37,6 +37,7 @@ from .config import Settings
 from .document import Document as ParsedPage
 from .document import is_xml
 from .fetch import Fetched, make_response
+from .json_document import is_json, json_candidate, sniff_json
 from .labels import RENDER_NEED, Verdict
 from .render import RENDERER_VERSION, BrowserCapacity, Rendered
 
@@ -49,7 +50,9 @@ def now() -> str:
 
 
 def sniffed_media_type(body: bytes) -> str:
-    """For a response that declared no media type: HTML and XML are recognisable, anything else is opaque."""
+    """Recognize HTML, XML and bounded valid JSON; otherwise the body is opaque."""
+    if sniff_json(body):
+        return 'application/json'
     start = body[:512].lstrip().lower()
     if start.startswith((b"<!doctype html", b"<html")):
         return "text/html"
@@ -197,6 +200,8 @@ class CaptureService:
         if 200 <= http.status_code < 300 and not accepts(request.accept, http_doc.media_type):  # sniffed
             return self._unsupported(result, http, http_doc.media_type)
         result.evidence.cost.bytes += len(http.body)
+        if is_json(http_doc.media_type):
+            return self._json_response(result, http, http_doc)
         verdict = await asyncio.to_thread(self.classifier.classify, Fetched(request.url, http.as_requests(), None))
         attempt = Attempt(
             "http",
@@ -285,6 +290,32 @@ class CaptureService:
         )
         return self._finish(result)
 
+    def _json_response(self, result: CaptureResult, http: HttpResponse, document: Document) -> CaptureResult:
+        """A full JSON response is acquired evidence, even when its syntax is invalid.
+
+        Never apply HTML classifiers, browser verification or method-cache policy.
+        Syntax interpretation belongs to the consumer; HTTP failures still fail.
+        """
+        attempt = Attempt('http', 'direct', http.status_code, round(http.elapsed_ms, 1),
+                          Assessment(primary=None), 'accept', 'JSON: returned as sent',
+                          reason_code='media_type')
+        result.evidence.attempts.append(attempt)
+        if not 200 <= http.status_code < 300:
+            reason = ('rate_limited' if http.status_code == 429 else
+                      'not_found' if http.status_code == 404 else
+                      'gone' if http.status_code == 410 else
+                      'server_error' if http.status_code >= 500 else 'client_error')
+            attempt.decision, attempt.decision_reason = 'fail', reason
+            result.failure = failures.from_reason(reason, http.status_code, reason, http.retry_after_seconds())
+            return self._finish(result)
+        if not http.body.strip():
+            attempt.decision, attempt.decision_reason = 'fail', 'empty response body'
+            result.document = None
+            result.failure = failures.failure('incomplete_content', 'empty response body')
+            return self._finish(result)
+        attempt.assessment.completeness = 'complete'
+        return self._captured(result, document)
+
     def _unsupported(self, result: CaptureResult, http: HttpResponse, media: str) -> CaptureResult:
         """The caller doesn't store this media type: fail without a document (the body is never read, or dropped)."""
         result.final_url, result.response = http.final_url, Response(http.status_code, http.headers, http.redirects)
@@ -318,6 +349,14 @@ class CaptureService:
             f"body larger than {cap} bytes: rendering instead",
         )
         result.evidence.attempts.append(attempt)
+        declared, _ = media_type(http.headers)
+        if is_json(declared) or is_xml(declared) or (
+            declared in ('', 'text/plain') and json_candidate(http.body)
+        ):
+            attempt.decision, attempt.decision_reason = 'fail', f'body larger than {cap} bytes'
+            attempt.reason_code = 'media_type'
+            result.failure = failures.failure('incomplete_content', attempt.decision_reason)
+            return self._finish(result)
         if self.managed is None:
             attempt.decision = "fail"
             result.failure = failures.failure("browser_unavailable", f"body larger than {cap} bytes and no browser")
@@ -660,6 +699,8 @@ class CaptureService:
     @staticmethod
     def _http_document(http: HttpResponse) -> Document:
         mt, charset = media_type(http.headers)
+        if mt == 'text/plain' and sniff_json(http.body):
+            mt = 'application/json'
         return Document("response_body", mt or sniffed_media_type(http.body), charset, http.body)
 
     def _captured(self, result: CaptureResult, document: Document) -> CaptureResult:

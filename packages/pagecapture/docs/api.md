@@ -42,12 +42,31 @@ Content-Type: application/json
 | `url` | yes | Absolute http(s) URL. |
 | `resolve_bot_challenges` | no, default `false` | Permits local challenge resolution followed by paid fallback if available. Neither runs when false. |
 | `exclusions` | no, default `[]` | URLs never to fetch: `[{"host", "path_prefix"}]`, at most 1,000. `host` is exact, `*.example.com` (the domain and every subdomain) or `*`; `path_prefix` (default `/`) matches whole decoded path segments, so `/admin` covers `/admin/users` but not `/administrator`. Checked on every redirect hop of the plain fetch and for every request the browser makes, on top of the service's own network policy. |
-| `accept` | no, default any | Media types the caller stores. A successful response of any other type fails fast as `unsupported_media_type`, without its body. Error responses are still read, so a 429 or 404 fails with its own code. |
+| `accept` | no, default any | Media types the caller stores, including structured suffix ranges such as `application/*+json`. A successful response of any other type fails as `unsupported_media_type`, without its body. Untyped and `text/plain` bodies may be read under the existing size cap to sniff JSON. Error responses are still read, so a 429 or 404 fails with its own code. |
 | `reference` | no | Caller's trace id (at most 256 characters), echoed back. Not used for deduplication. |
 | `deadline_ms` | no | Upper bound for the whole capture. Defaults to the service's cap (120 s). |
 
 Unknown fields and invalid values are rejected (400), and so is a `url` that the request's own exclusions cover.
 There is deliberately no render mode or completion setting: both are automatic.
+
+JSON (`application/json`, `text/json` and structured `+json` types) is returned as
+the exact `response_body`, without HTML classification, rendering or method-cache
+verification. Acquisition success means a complete nonempty response was received,
+not that its JSON syntax is valid; consumers own syntax interpretation. Malformed
+declared JSON is retained as acquired evidence. HTTP error statuses keep their
+ordinary website failure codes. Empty or size-capped JSON fails as
+`incomplete_content`, never rendering or returning truncated bytes as exact content.
+
+Untyped and `text/plain` object/array bodies are recognized as JSON only when
+strict UTF-8 JSON validation succeeds within 128 nested arrays/objects. A UTF-8
+BOM and the recognized `)]}'`/`while(1);` XSSI framing are ignored only for sniffing;
+returned bytes are unchanged. The response headers retain the declared media
+type even when the document media type is sniffed as `application/json`.
+A named suffix range matches only its family and structured suffix:
+`application/*+json` accepts `application/ld+json`, but does not accept
+`application/json`, `text/ld+json` or arbitrary subtypes. NDJSON is not recognized.
+`*/*+json` accepts structured JSON across families, including `model/gltf+json`;
+it still does not accept `application/json`, which must be listed separately.
 
 The service fetches and renders as one bot identity, `StolosioBot` (with an info URL, in a browser-shaped user
 agent). Local resolution keeps the native browser identity; the paid tier keeps its provider's identity:

@@ -127,6 +127,13 @@ success because a browser attempt failed, and failed verification adds no method
 
 ## Operator views
 
+JSON documents use plain HTTP only, including recognized untyped/`text/plain`
+object and array responses. The capture API accepts structured media suffix
+ranges such as `application/*+json`. It returns original bytes without JSON
+reserialization; syntax interpretation belongs to the consumer. Malformed declared
+JSON can be a successfully acquired response. Empty or size-capped JSON fails
+without rendering. See the package [capture contract](../packages/pagecapture/docs/api.md).
+
 Overview gives automation sessions and captures equal prominence. Captures has its own
 searchable, paginated history and acquisition timeline. HTTP-only means no browser tier was
 attempted; a render which verifies HTTP sufficiency still counts as browser use even when the
