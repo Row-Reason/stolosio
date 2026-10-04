@@ -8,13 +8,15 @@ its (simplified) CDP gateway for browser automation; **periplus** and other craw
   escalation are decided and coordinated by the service, which returns evidence of what it did.
 - **Trustworthy or failed.** `captured` means the service trusts the document holds the page's content. Anything
   short of that is `failed`, with the best-effort document attached as evidence.
-- **One attempt per call, no retry decisions.** Retrying, backoff, per-domain pacing, robots.txt, deduplication,
-  recrawl and storage belong to the caller. The response gives what it needs: a failure category, whether the
+- **One attempt per call, no retry decisions.** Retrying, crawl scheduling, robots.txt, deduplication,
+  recrawl and storage belong to the caller. A host such as Stolosio may enforce shared destination admission
+  and cooldowns outside the acquisition algorithm. The response gives a failure category, whether the
   failure is transient, and when to retry.
 - **The caller's preferences travel with each request.** What it never wants fetched (`exclusions`) and what it
   stores (`accept`). The service keeps no per-caller settings.
 - **No documents stored.** The document is returned inline. The service keeps only a small method cache (per URL
-  and URL pattern: was plain HTTP enough last time?) to decide when rendering can be skipped.
+  and URL pattern: was plain HTTP enough last time?) to decide when rendering can be skipped. The host can
+  separately persist shared admission policies and acquisition facts without storing documents.
 
 The reference implementation is `pagecapture.CaptureService` (`src/pagecapture/service.py`); the types are in
 `src/pagecapture/api.py` and `CaptureResult.to_json()` produces the response body below. `contract/` holds JSON
@@ -134,7 +136,9 @@ plain HTTP ─► blocked / broken / unreachable ──────────�
 ## Response
 
 Always the same JSON shape. HTTP **200** for every attempt result, failures included; **400** for an invalid
-request; **503** only when the service can't accept requests at all (same body shape, `Retry-After` header).
+request; **429** when the host preemptively refuses shared domain pacing (`domain_throttled`, same
+body shape and `Retry-After`); **503** when service capacity prevents admission (same body shape,
+`Retry-After`). A target's HTTP status remains separate from the endpoint's HTTP status.
 
 ```jsonc
 {
@@ -228,6 +232,7 @@ request; **503** only when the service can't accept requests at all (same body s
 | `unreachable` | network | yes | no HTTP response: connection, TLS, timeout, a DNS failure not confirmed as a missing host |
 | `host_not_found` | network | no | the host (the URL's or a redirect's) doesn't exist: a resolver confirmed it has no such name (NXDOMAIN) or no address |
 | `capacity` | gateway | yes | no browser capacity right now, including a provider refusing for its plan's limits (BrowserQL 429/402 or a concurrency/rate/quota error; `retry_after_seconds` from Retry-After, else 30 s for concurrency and 3600 s for quota) |
+| `domain_throttled` | gateway | yes | host refused shared destination admission before acquisition; retry guidance supplied by the host |
 | `browser_unavailable` | gateway | yes | a browser was needed but couldn't be used (a provider outage or fault) |
 | `deadline_exceeded` | gateway | yes | the capture couldn't finish within the deadline |
 | `incomplete_content` | content | yes | even after rendering the content isn't trustworthy (or the body is empty) |

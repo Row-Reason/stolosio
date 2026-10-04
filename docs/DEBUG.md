@@ -25,6 +25,11 @@ answer them.
 
 ## Observations, not recommendations
 
+`capture.pacing_adjusted` records an applied policy change: normalized hostname, concurrency,
+spacing, generation and a bounded reason. It is a transactional lifecycle fact, with no URL,
+headers, credentials or page content. The domain pacing admin view shows current learned state and retained adjustment history.
+`operator_reset` records an operator-requested reset applied on the next capture transaction.
+
 The debug stream reports facts observed during the session. It must not emit decisions,
 recommendations, or inferred conclusions.
 

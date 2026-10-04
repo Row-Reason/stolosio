@@ -1,0 +1,813 @@
+{
+  "wikipedia_initial": {
+    "summary": {
+      "run_id": "20261004T141552Z",
+      "hostname": "en.wikipedia.org",
+      "settings": {
+        "default_concurrency": 2,
+        "default_spacing_seconds": 1.0,
+        "maximum_concurrency": 8,
+        "minimum_spacing_seconds": 0.1,
+        "maximum_spacing_seconds": 60.0,
+        "learned_ttl_seconds": 86400,
+        "healthy_samples": 20,
+        "overload_samples": 3,
+        "cooldown_seconds": 30,
+        "version": 1
+      },
+      "duration_s": 274.953,
+      "offered_rps_ceiling": 4.0,
+      "workers": 8,
+      "api_calls": 1072,
+      "completed_captures": 400,
+      "gateway_statuses": {
+        "429": 672,
+        "200": 400
+      },
+      "outcomes": {
+        "domain_throttled": 672,
+        "captured": 400
+      },
+      "origin_statuses": {
+        "200": 420
+      },
+      "successful_capture_median_s": 0.3965,
+      "final_policy": {
+        "hostname": "en.wikipedia.org",
+        "concurrency": 3,
+        "spacing_seconds": 0.31381,
+        "expires_at": "2026-10-05T14:20:22.238223Z",
+        "cooldown_until": null,
+        "healthy_samples": 11,
+        "concurrency_samples": 5,
+        "overload_samples": 0,
+        "generation": 12,
+        "reason": "healthy_at_limit",
+        "adjusted_at": "2026-10-04T14:19:09.899864Z",
+        "expired": false,
+        "effective_concurrency": 3,
+        "effective_spacing_seconds": 0.31381,
+        "active_captures": 0
+      },
+      "last_30s_admitted_capture_rps": 2.033333333333333,
+      "browser_attempts": 20,
+      "urls": [
+        "https://en.wikipedia.org/wiki/Caching",
+        "https://en.wikipedia.org/wiki/Concurrency",
+        "https://en.wikipedia.org/wiki/HTTP",
+        "https://en.wikipedia.org/wiki/Queueing_theory",
+        "https://en.wikipedia.org/wiki/Rate_limiting",
+        "https://en.wikipedia.org/wiki/Token_bucket"
+      ]
+    },
+    "policy_transitions": [
+      {
+        "elapsed_s": 0.078,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 2,
+          "spacing_seconds": 1.0,
+          "expires_at": "2026-10-05T14:10:39.575013Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 0,
+          "reason": "default",
+          "adjusted_at": null,
+          "expired": false,
+          "effective_concurrency": 2,
+          "effective_spacing_seconds": 1.0,
+          "active_captures": 0
+        }
+      },
+      {
+        "elapsed_s": 32.241,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 1.0,
+          "expires_at": "2026-10-05T14:16:23.408610Z",
+          "cooldown_until": null,
+          "healthy_samples": 1,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 1,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:16:22.785864Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 1.0,
+          "active_captures": 1
+        }
+      },
+      {
+        "elapsed_s": 54.346,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.9,
+          "expires_at": "2026-10-05T14:16:46.043122Z",
+          "cooldown_until": null,
+          "healthy_samples": 1,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 2,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:16:44.930910Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.9,
+          "active_captures": 0
+        }
+      },
+      {
+        "elapsed_s": 74.442,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.81,
+          "expires_at": "2026-10-05T14:17:06.696891Z",
+          "cooldown_until": null,
+          "healthy_samples": 1,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 3,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:17:05.393026Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.81,
+          "active_captures": 0
+        }
+      },
+      {
+        "elapsed_s": 94.538,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.729,
+          "expires_at": "2026-10-05T14:17:26.234252Z",
+          "cooldown_until": null,
+          "healthy_samples": 1,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 4,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:17:25.096265Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.729,
+          "active_captures": 1
+        }
+      },
+      {
+        "elapsed_s": 108.671,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.6561,
+          "expires_at": "2026-10-05T14:17:40.383258Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 5,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:17:40.383258Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.6561,
+          "active_captures": 1
+        }
+      },
+      {
+        "elapsed_s": 124.761,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.59049,
+          "expires_at": "2026-10-05T14:17:56.940835Z",
+          "cooldown_until": null,
+          "healthy_samples": 2,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 6,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:17:55.453184Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.59049,
+          "active_captures": 0
+        }
+      },
+      {
+        "elapsed_s": 138.854,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.531441,
+          "expires_at": "2026-10-05T14:18:10.844940Z",
+          "cooldown_until": null,
+          "healthy_samples": 1,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 7,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:18:10.317053Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.531441,
+          "active_captures": 0
+        }
+      },
+      {
+        "elapsed_s": 152.926,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.478297,
+          "expires_at": "2026-10-05T14:18:25.251725Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 8,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:18:25.251725Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.478297,
+          "active_captures": 0
+        }
+      },
+      {
+        "elapsed_s": 167.111,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.430467,
+          "expires_at": "2026-10-05T14:18:38.173225Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 9,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:18:38.173225Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.430467,
+          "active_captures": 2
+        }
+      },
+      {
+        "elapsed_s": 177.165,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.38742,
+          "expires_at": "2026-10-05T14:18:49.405698Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 10,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:18:49.405698Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.38742,
+          "active_captures": 1
+        }
+      },
+      {
+        "elapsed_s": 187.213,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.348678,
+          "expires_at": "2026-10-05T14:18:59.358641Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 11,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:18:59.358641Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.348678,
+          "active_captures": 0
+        }
+      },
+      {
+        "elapsed_s": 199.271,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.31381,
+          "expires_at": "2026-10-05T14:19:09.899864Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 12,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:19:09.899864Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.31381,
+          "active_captures": 1
+        }
+      }
+    ],
+    "origin_throttles": []
+  },
+  "wikipedia_fixed": {
+    "summary": {
+      "run_id": "20261004T142405Z",
+      "hostname": "en.wikipedia.org",
+      "settings": {
+        "default_concurrency": 2,
+        "default_spacing_seconds": 1.0,
+        "maximum_concurrency": 8,
+        "minimum_spacing_seconds": 0.1,
+        "maximum_spacing_seconds": 60.0,
+        "learned_ttl_seconds": 86400,
+        "healthy_samples": 20,
+        "overload_samples": 3,
+        "cooldown_seconds": 30,
+        "version": 1
+      },
+      "duration_s": 81.059,
+      "offered_rps_ceiling": 4.0,
+      "workers": 8,
+      "api_calls": 307,
+      "completed_captures": 243,
+      "gateway_statuses": {
+        "429": 64,
+        "200": 243
+      },
+      "outcomes": {
+        "domain_throttled": 64,
+        "captured": 243
+      },
+      "origin_statuses": {
+        "200": 255
+      },
+      "successful_capture_median_s": 0.407,
+      "final_policy": {
+        "hostname": "en.wikipedia.org",
+        "concurrency": 5,
+        "spacing_seconds": 0.150094,
+        "expires_at": "2026-10-05T14:25:22.723995Z",
+        "cooldown_until": null,
+        "healthy_samples": 1,
+        "concurrency_samples": 0,
+        "overload_samples": 0,
+        "generation": 21,
+        "reason": "healthy_at_limit",
+        "adjusted_at": "2026-10-04T14:25:21.029321Z",
+        "expired": false,
+        "effective_concurrency": 5,
+        "effective_spacing_seconds": 0.150094,
+        "active_captures": 0
+      },
+      "last_30s_admitted_capture_rps": 3.6,
+      "browser_attempts": 12,
+      "urls": [
+        "https://en.wikipedia.org/wiki/Queueing_theory",
+        "https://en.wikipedia.org/wiki/Rate_limiting",
+        "https://en.wikipedia.org/wiki/Token_bucket"
+      ]
+    },
+    "policy_transitions": [
+      {
+        "elapsed_s": 0.083,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.31381,
+          "expires_at": "2026-10-05T14:20:22.238223Z",
+          "cooldown_until": null,
+          "healthy_samples": 11,
+          "concurrency_samples": 5,
+          "overload_samples": 0,
+          "generation": 12,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:19:09.899864Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.31381,
+          "active_captures": 0
+        }
+      },
+      {
+        "elapsed_s": 6.113,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.282429,
+          "expires_at": "2026-10-05T14:24:11.473683Z",
+          "cooldown_until": null,
+          "healthy_samples": 1,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 13,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:24:10.860888Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.282429,
+          "active_captures": 2
+        }
+      },
+      {
+        "elapsed_s": 16.21,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.254186,
+          "expires_at": "2026-10-05T14:24:21.585232Z",
+          "cooldown_until": null,
+          "healthy_samples": 4,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 14,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:24:20.067453Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.254186,
+          "active_captures": 0
+        }
+      },
+      {
+        "elapsed_s": 24.28,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.228767,
+          "expires_at": "2026-10-05T14:24:29.547846Z",
+          "cooldown_until": null,
+          "healthy_samples": 3,
+          "concurrency_samples": 1,
+          "overload_samples": 0,
+          "generation": 15,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:24:28.367212Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.228767,
+          "active_captures": 2
+        }
+      },
+      {
+        "elapsed_s": 30.321,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.20589,
+          "expires_at": "2026-10-05T14:24:35.662680Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 16,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:24:35.662680Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.20589,
+          "active_captures": 1
+        }
+      },
+      {
+        "elapsed_s": 36.361,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.185301,
+          "expires_at": "2026-10-05T14:24:41.512693Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 17,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:24:41.512693Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.185301,
+          "active_captures": 2
+        }
+      },
+      {
+        "elapsed_s": 42.404,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 3,
+          "spacing_seconds": 0.166771,
+          "expires_at": "2026-10-05T14:24:47.514891Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 18,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:24:47.514891Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 0.166771,
+          "active_captures": 1
+        }
+      },
+      {
+        "elapsed_s": 52.472,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 4,
+          "spacing_seconds": 0.166771,
+          "expires_at": "2026-10-05T14:24:57.923839Z",
+          "cooldown_until": null,
+          "healthy_samples": 4,
+          "concurrency_samples": 1,
+          "overload_samples": 0,
+          "generation": 19,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:24:56.335605Z",
+          "expired": false,
+          "effective_concurrency": 4,
+          "effective_spacing_seconds": 0.166771,
+          "active_captures": 2
+        }
+      },
+      {
+        "elapsed_s": 60.549,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 4,
+          "spacing_seconds": 0.150094,
+          "expires_at": "2026-10-05T14:25:05.648784Z",
+          "cooldown_until": null,
+          "healthy_samples": 2,
+          "concurrency_samples": 2,
+          "overload_samples": 0,
+          "generation": 20,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:25:04.913719Z",
+          "expired": false,
+          "effective_concurrency": 4,
+          "effective_spacing_seconds": 0.150094,
+          "active_captures": 4
+        }
+      },
+      {
+        "elapsed_s": 76.64,
+        "policy": {
+          "hostname": "en.wikipedia.org",
+          "concurrency": 5,
+          "spacing_seconds": 0.150094,
+          "expires_at": "2026-10-05T14:25:21.029321Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 21,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:25:21.029321Z",
+          "expired": false,
+          "effective_concurrency": 5,
+          "effective_spacing_seconds": 0.150094,
+          "active_captures": 3
+        }
+      }
+    ],
+    "origin_throttles": []
+  },
+  "controlled_origin": {
+    "summary": {
+      "run_id": "20261004T142406Z",
+      "hostname": "11.254.253.2",
+      "settings": {
+        "default_concurrency": 2,
+        "default_spacing_seconds": 1.0,
+        "maximum_concurrency": 8,
+        "minimum_spacing_seconds": 0.1,
+        "maximum_spacing_seconds": 60.0,
+        "learned_ttl_seconds": 86400,
+        "healthy_samples": 20,
+        "overload_samples": 3,
+        "cooldown_seconds": 30,
+        "version": 1
+      },
+      "duration_s": 202.194,
+      "offered_rps_ceiling": 4.0,
+      "workers": 8,
+      "api_calls": 744,
+      "completed_captures": 126,
+      "gateway_statuses": {
+        "429": 618,
+        "200": 126
+      },
+      "outcomes": {
+        "domain_throttled": 618,
+        "captured": 125,
+        "rate_limited": 1
+      },
+      "origin_statuses": {
+        "200": 125,
+        "429": 1
+      },
+      "successful_capture_median_s": 3.06,
+      "final_policy": {
+        "hostname": "11.254.253.2",
+        "concurrency": 3,
+        "spacing_seconds": 1.62,
+        "expires_at": "2026-10-05T14:27:28.767811Z",
+        "cooldown_until": "2026-10-04T14:25:34.715729Z",
+        "healthy_samples": 14,
+        "concurrency_samples": 0,
+        "overload_samples": 0,
+        "generation": 6,
+        "reason": "healthy_at_limit",
+        "adjusted_at": "2026-10-04T14:27:01.808454Z",
+        "expired": false,
+        "effective_concurrency": 3,
+        "effective_spacing_seconds": 1.62,
+        "active_captures": 0
+      },
+      "last_30s_admitted_capture_rps": 0.5666666666666667,
+      "browser_attempts": 0,
+      "urls": [
+        "http://11.254.253.2/data"
+      ]
+    },
+    "policy_transitions": [
+      {
+        "elapsed_s": 0.053,
+        "policy": {
+          "hostname": "11.254.253.2",
+          "concurrency": 2,
+          "spacing_seconds": 1.0,
+          "expires_at": "2026-10-05T14:19:31.767862Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 0,
+          "reason": "default",
+          "adjusted_at": null,
+          "expired": false,
+          "effective_concurrency": 2,
+          "effective_spacing_seconds": 1.0,
+          "active_captures": 0
+        }
+      },
+      {
+        "elapsed_s": 34.46,
+        "policy": {
+          "hostname": "11.254.253.2",
+          "concurrency": 3,
+          "spacing_seconds": 1.0,
+          "expires_at": "2026-10-05T14:24:39.658353Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 1,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:24:39.658353Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 1.0,
+          "active_captures": 3
+        }
+      },
+      {
+        "elapsed_s": 58.829,
+        "policy": {
+          "hostname": "11.254.253.2",
+          "concurrency": 4,
+          "spacing_seconds": 1.0,
+          "expires_at": "2026-10-05T14:25:03.946798Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 2,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:25:03.946798Z",
+          "expired": false,
+          "effective_concurrency": 4,
+          "effective_spacing_seconds": 1.0,
+          "active_captures": 3
+        }
+      },
+      {
+        "elapsed_s": 82.997,
+        "policy": {
+          "hostname": "11.254.253.2",
+          "concurrency": 4,
+          "spacing_seconds": 0.9,
+          "expires_at": "2026-10-05T14:25:29.221650Z",
+          "cooldown_until": null,
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 3,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:25:29.221650Z",
+          "expired": false,
+          "effective_concurrency": 4,
+          "effective_spacing_seconds": 0.9,
+          "active_captures": 2
+        }
+      },
+      {
+        "elapsed_s": 89.023,
+        "policy": {
+          "hostname": "11.254.253.2",
+          "concurrency": 2,
+          "spacing_seconds": 1.8,
+          "expires_at": "2026-10-05T14:25:33.715729Z",
+          "cooldown_until": "2026-10-04T14:25:34.715729Z",
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 4,
+          "reason": "origin_throttled",
+          "adjusted_at": "2026-10-04T14:25:33.715729Z",
+          "expired": false,
+          "effective_concurrency": 2,
+          "effective_spacing_seconds": 1.8,
+          "active_captures": 2
+        }
+      },
+      {
+        "elapsed_s": 133.222,
+        "policy": {
+          "hostname": "11.254.253.2",
+          "concurrency": 3,
+          "spacing_seconds": 1.8,
+          "expires_at": "2026-10-05T14:26:18.021907Z",
+          "cooldown_until": "2026-10-04T14:25:34.715729Z",
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 5,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:26:18.021907Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 1.8,
+          "active_captures": 2
+        }
+      },
+      {
+        "elapsed_s": 175.415,
+        "policy": {
+          "hostname": "11.254.253.2",
+          "concurrency": 3,
+          "spacing_seconds": 1.62,
+          "expires_at": "2026-10-05T14:27:01.808454Z",
+          "cooldown_until": "2026-10-04T14:25:34.715729Z",
+          "healthy_samples": 0,
+          "concurrency_samples": 0,
+          "overload_samples": 0,
+          "generation": 6,
+          "reason": "healthy_at_limit",
+          "adjusted_at": "2026-10-04T14:27:01.808454Z",
+          "expired": false,
+          "effective_concurrency": 3,
+          "effective_spacing_seconds": 1.62,
+          "active_captures": 1
+        }
+      }
+    ],
+    "origin_throttles": [
+      {
+        "elapsed_s": 87.08,
+        "finished_s": 87.139,
+        "duration_s": 0.059,
+        "url": "http://11.254.253.2/data",
+        "gateway_status": 200,
+        "outcome": "failed",
+        "failure_code": "rate_limited",
+        "failure_category": "website",
+        "reason": null,
+        "retry_after_seconds": 1.0,
+        "attempts": [
+          {
+            "tier": "direct",
+            "status_code": 429,
+            "duration_ms": 2.8,
+            "decision": "fail",
+            "reason": "media_type"
+          }
+        ]
+      }
+    ]
+  }
+}

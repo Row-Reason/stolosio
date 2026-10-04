@@ -4,6 +4,7 @@ import time
 from dataclasses import replace
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from pagecapture import BqlBrowserTier, CaptureRequest, CaptureResult, CaptureService, Exclusion
 from pagecapture import Settings as PageCaptureSettings
@@ -30,6 +31,7 @@ from backend.proxy.attempts import AttemptAdmission, AttemptLease
 from backend.proxy.capture.analytics import capture_facts
 from backend.proxy.capture.cache import PostgresMethodCache
 from backend.proxy.capture.fetcher import StolosioFetcher
+from backend.proxy.capture.pacing import pacing_observation
 from backend.proxy.capture.tiers import CloudChallengeTier, SharedRenderer, SlotTier
 from backend.proxy.contracts import (
     ProviderName,
@@ -39,6 +41,9 @@ from backend.proxy.contracts import (
     SessionSettingSchema,
     SettingSource,
 )
+from backend.proxy.domain_pacing import DomainPacing, DomainThrottled, PacingRepository
+from backend.proxy.domain_pacing.contracts import Lease
+from backend.proxy.domain_pacing.service import normalize_hostname
 from backend.proxy.errors import GatewayCapacityFull, ProviderQueueFull, ProviderQueueTimeout
 from backend.proxy.external_capacity import ExternalCapacityRepository
 from backend.proxy.network_policy import NetworkPolicyRepository
@@ -117,6 +122,8 @@ class CaptureRunner:
         external_capacity: ExternalCapacityRepository,
         database_sessions: async_sessionmaker[AsyncSession],
         settings: Settings,
+        *,
+        domain_pacing: DomainPacing | None = None,
     ) -> None:
         self._sessions = sessions
         self._attempts = attempts
@@ -166,6 +173,7 @@ class CaptureRunner:
         )
         self._classifier = Classifier(self._page_settings)
         self._cache = PostgresMethodCache(database_sessions)
+        self._pacing = domain_pacing or DomainPacing(PacingRepository(database_sessions))
 
     async def close(self) -> None:
         for part in (self._fetcher, self._renderer, self._local_renderer, self._cloud):
@@ -235,10 +243,12 @@ class CaptureRunner:
         capture = _Capture(session)
         failed, reason = True, "capture_failed"
         result: CaptureResult | None = None
+        pacing_lease: Lease | None = None
         try:
             try:
                 async with asyncio.timeout_at(deadline_at):
                     await session.open()
+                    pacing_lease = await self._admit_domain(request, session, deadline_at)
                     challenge_tier = await self._challenge_tier(request, capture, resolved)
             except TimeoutError:
                 result = CaptureResult(
@@ -285,10 +295,21 @@ class CaptureRunner:
                     session.session.session_id,
                 )
             return result
+        except DomainThrottled as error:
+            reason = error.reason
+            CAPTURE_REJECTED.labels(reason).inc()
+            raise
         except asyncio.CancelledError:
             reason = "client_disconnected"
             raise
         finally:
+            if pacing_lease is not None:
+                await self._bounded(
+                    self._pacing.release(
+                        pacing_lease, pacing_observation(result) if result is not None else None
+                    ),
+                    "domain pacing",
+                )
             duration_ms = round((time.monotonic() - started) * 1000)
             if result is not None:
                 await self._bounded(
@@ -299,6 +320,29 @@ class CaptureRunner:
                 if attempt is not None:
                     await self._bounded(attempt.release(failed=failed, reason=reason), "attempt")
             await self._bounded(session.release(failed=failed, reason=reason), "session")
+
+    async def _admit_domain(
+        self, request: CaptureRequest, session: SessionLease, deadline_at: float
+    ) -> Lease:
+        # Know the lease identity before the transaction: cancellation can arrive after commit
+        # but before acquire returns its value.
+        lease = Lease(str(uuid4()), normalize_hostname(urlsplit(request.url).hostname or ""))
+        admission = asyncio.create_task(
+            self._pacing.acquire(
+                urlsplit(request.url).hostname or "",
+                session.session.session_id,
+                max(1, deadline_at - time.monotonic()) + 5,
+                lease_id=lease.id,
+            )
+        )
+        try:
+            return await asyncio.shield(admission)
+        except asyncio.CancelledError:
+            # Drain a potentially committed admission before releasing the logical session.
+            admission.cancel()
+            await asyncio.gather(admission, return_exceptions=True)
+            await self._bounded(self._pacing.release(lease), "late domain pacing")
+            raise
 
     async def _local_slot(
         self, capture: _Capture, resolved: ResolvedSessionSettings, budget_s: float

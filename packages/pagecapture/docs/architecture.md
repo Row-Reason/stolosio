@@ -14,8 +14,9 @@ Wrongly accepting incomplete content (lost content) is worse than a needless ren
 
 - **stolosio** hosts `POST /v1/capture` (this package, behind its egress, blocklist and browser fleet) and keeps a
   simplified CDP gateway for real browser automation.
-- **periplus** calls the endpoint once per URL and stores what it returns; it keeps retries, pacing, recrawl and
-  storage, and drops its own CDP/Playwright capture logic and content policies.
+- **periplus** calls the endpoint once per URL and stores what it returns; it keeps retries, crawl scheduling,
+  recrawl and storage. Stolosio enforces shared hostname admission and cooldowns around acquisition;
+  the package contains no shared pacing state or controller.
 
 ## Components (`src/pagecapture/`)
 

@@ -28,10 +28,26 @@ class EventType(StrEnum):
     JAVASCRIPT_EXCEPTION = "javascript.exception"
     PROVIDER_DISCONNECTED = "provider.disconnected"
     CAPTURE_COMPLETED = "capture.completed"
+    DOMAIN_PACING_ADJUSTED = "capture.pacing_adjusted"
 
 
 class _Payload(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class DomainPacingPayload(_Payload):
+    hostname: str = Field(min_length=1, max_length=253, pattern=r"^[a-z0-9.:-]+$")
+    concurrency: int = Field(ge=1, le=100)
+    spacing_seconds: float = Field(gt=0, le=3600)
+    reason: Literal[
+        "ttl_expired",
+        "settings_changed",
+        "healthy_at_limit",
+        "origin_throttled",
+        "origin_overload",
+        "operator_reset",
+    ]
+    generation: int = Field(ge=1)
 
 
 class LifecyclePayload(_Payload):
@@ -131,7 +147,13 @@ _COMMANDS = {
     EventType.COMMAND_FAILED,
     EventType.COMMAND_INTERRUPTED,
 }
-_OBSERVATIONS = set(EventType) - _LIFECYCLE - _ATTEMPTS - _COMMANDS - {EventType.CAPTURE_COMPLETED}
+_OBSERVATIONS = (
+    set(EventType)
+    - _LIFECYCLE
+    - _ATTEMPTS
+    - _COMMANDS
+    - {EventType.CAPTURE_COMPLETED, EventType.DOMAIN_PACING_ADJUSTED}
+)
 
 _MODELS: dict[EventType, type[_Payload]] = {
     **dict.fromkeys(_LIFECYCLE, LifecyclePayload),
@@ -141,6 +163,7 @@ _MODELS: dict[EventType, type[_Payload]] = {
     EventType.PROVIDER_DISCONNECTED: ProviderDisconnectPayload,
     EventType.COMMAND_SUMMARY: CommandSummaryPayload,
     EventType.CAPTURE_COMPLETED: CapturePayload,
+    EventType.DOMAIN_PACING_ADJUSTED: DomainPacingPayload,
 }
 
 

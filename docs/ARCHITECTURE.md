@@ -34,6 +34,11 @@ jitter capacity retries and avoid counting pre-accept denials as page captures.
 
 Periplus acquires pages through `POST /v1/capture` rather than CDP.
 
+Capture's [domain pacing](DOMAIN_PACING.md) module enforces shared per-host capture concurrency,
+start spacing and cooldowns in PostgreSQL. Callers retain scheduling and retries. Learned
+allowances expire by TTL; Stolosio refuses excess captures with HTTP 429 and retry guidance.
+Native CDP sessions remain opaque and are not subject to capture pacing.
+
 ## Data path
 
 ```text

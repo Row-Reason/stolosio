@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
+import { DomainPacingSettingsPanel } from "@/components/domain-pacing-settings"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -300,7 +301,7 @@ export function PolicyPage() {
           Settings
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          Global request blocking and the cost model applied to provider usage.
+          Domain pacing, global request blocking and provider cost rates.
         </p>
       </header>
 
@@ -322,6 +323,7 @@ export function PolicyPage() {
               policy={networkPolicy.data}
             />
             <CostRates rates={rates.data} />
+            <DomainPacingSettingsPanel />
           </div>
         )}
       </div>

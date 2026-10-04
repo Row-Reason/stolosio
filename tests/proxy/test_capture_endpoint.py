@@ -2,6 +2,7 @@
 
 import asyncio
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
@@ -26,6 +27,8 @@ from backend.messaging import PollingNotifier
 from backend.proxy.attempts import AttemptAdmission
 from backend.proxy.capture import CaptureRunner, CaptureUnavailable
 from backend.proxy.contracts import ProviderName
+from backend.proxy.domain_pacing import DomainPacing, DomainThrottled, PacingRepository
+from backend.proxy.domain_pacing.contracts import Lease
 from backend.proxy.external_capacity import ExternalCapacityRepository
 from backend.proxy.network_policy import NetworkPolicyRepository
 from backend.proxy.postgres import (
@@ -110,6 +113,16 @@ class FakeCloud:
         pass
 
 
+class FakePacing:
+    """Keep fleet/capture tests independent of domain admission; tested separately below."""
+
+    async def acquire(self, hostname, session_id, lease_seconds, *, lease_id=None):
+        return Lease(lease_id or str(uuid4()), hostname)
+
+    async def release(self, lease, observation=None):
+        pass
+
+
 @pytest.fixture
 def capture_settings() -> Settings:
     return Settings(
@@ -176,6 +189,7 @@ async def runner(
         capacity,
         database_sessions,
         capture_settings,
+        domain_pacing=FakePacing(),
     )
     runner._fetcher = FakeFetcher()
     runner._renderer = FakeRenderer()
@@ -708,6 +722,106 @@ def test_no_capacity_is_503_with_retry_after_and_the_same_body_shape() -> None:
     body = response.json()
     assert body["outcome"] == "failed" and body["document"] is None
     assert body["failure"]["code"] == "capacity" and body["failure"]["transient"] is True
+
+
+def test_domain_throttle_is_429_with_gateway_failure_and_retry_guidance() -> None:
+    response = client(FakeRunner(DomainThrottled("domain_cooldown", 120))).post(
+        "/v1/capture", json={"url": "https://example.test/page", "reference": "r-1"}
+    )
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "120"
+    body = response.json()
+    assert body["reference"] == "r-1" and body["document"] is None
+    assert body["failure"] == {
+        "code": "domain_throttled",
+        "category": "gateway",
+        "transient": True,
+        "message": "domain_cooldown",
+        "retry_after_seconds": 120,
+        "resolution_attempted": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_domain_refusal_does_not_fetch_or_leak_global_capacity(runner, database_sessions):
+    from backend.db.models import DomainPacingLease
+
+    runner._pacing = DomainPacing(PacingRepository(database_sessions))
+    await runner.capture(CaptureRequest(url="https://example.test/first"))
+    fetched = []
+
+    async def during():
+        fetched.append(True)
+
+    runner._fetcher = FakeFetcher(during=during)
+    with pytest.raises(DomainThrottled, match="domain_spacing"):
+        await runner.capture(CaptureRequest(url="https://EXAMPLE.test./second"))
+    assert fetched == []
+    async with database_sessions() as database:
+        assert not list(await database.scalars(select(DomainPacingLease)))
+        sessions = list(await database.scalars(select(GatewaySession)))
+        assert len(sessions) == 2
+        assert all(session.state in ("closed", "failed") for session in sessions)
+
+
+@pytest.mark.asyncio
+async def test_target_429_becomes_shared_cooldown(runner, database_sessions):
+    runner._pacing = DomainPacing(PacingRepository(database_sessions))
+    runner._fetcher = FakeFetcher(
+        status=429, headers=[("Content-Type", "text/html"), ("Retry-After", "120")]
+    )
+    result = await runner.capture(CaptureRequest(url="https://example.test/first"))
+    assert result.failure.code == "rate_limited"
+    with pytest.raises(DomainThrottled, match="domain_cooldown") as refusal:
+        await runner.capture(CaptureRequest(url="https://example.test/second"))
+    assert 119 <= refusal.value.retry_after_seconds <= 120
+
+
+@pytest.mark.asyncio
+async def test_cancellation_releases_real_domain_lease(runner, database_sessions):
+    from backend.db.models import DomainPacingLease
+
+    runner._pacing = DomainPacing(PacingRepository(database_sessions))
+    entered = asyncio.Event()
+
+    async def during():
+        entered.set()
+        await asyncio.Event().wait()
+
+    runner._fetcher = FakeFetcher(during=during)
+    task = asyncio.create_task(runner.capture(CaptureRequest(url="https://example.test/cancel")))
+    await asyncio.wait_for(entered.wait(), 5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    async with database_sessions() as database:
+        assert not list(await database.scalars(select(DomainPacingLease)))
+
+
+@pytest.mark.asyncio
+async def test_cancellation_after_domain_commit_before_return_releases_lease(
+    runner, database_sessions
+):
+    from backend.db.models import DomainPacingLease
+
+    runner._pacing = DomainPacing(PacingRepository(database_sessions))
+    acquire = runner._pacing.acquire
+    committed = asyncio.Event()
+
+    async def delayed(*args, **kwargs):
+        lease = await acquire(*args, **kwargs)
+        committed.set()
+        await asyncio.Event().wait()
+        return lease
+
+    runner._pacing.acquire = delayed
+    task = asyncio.create_task(runner.capture(CaptureRequest(url="https://example.test/cancel")))
+    await asyncio.wait_for(committed.wait(), 5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    async with database_sessions() as database:
+        assert not list(await database.scalars(select(DomainPacingLease)))
 
 
 @pytest.mark.asyncio

@@ -19,6 +19,7 @@ FAILURES: dict[str, tuple[str, bool]] = {
     "unreachable": ("network", True),
     "host_not_found": ("network", False),  # a resolver confirmed the host doesn't exist (NXDOMAIN) or has no address
     "capacity": ("gateway", True),
+    "domain_throttled": ("gateway", True),
     "browser_unavailable": ("gateway", True),
     "deadline_exceeded": ("gateway", True),
     "incomplete_content": ("content", True),

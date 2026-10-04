@@ -45,6 +45,27 @@ def test_unknown_event_and_payload_fields_are_rejected() -> None:
         )
 
 
+def test_pacing_change_event_cannot_carry_urls_or_sensitive_fields():
+    payload = {
+        "hostname": "example.com",
+        "concurrency": 2,
+        "spacing_seconds": 1,
+        "reason": "healthy_at_limit",
+        "generation": 1,
+    }
+    event = SessionEvent.create(EventType.DOMAIN_PACING_ADJUSTED, uuid4(), payload=payload)
+    assert SessionEvent.from_json(event.to_json()) == event
+    for extra in ({"cookie": "secret"}, {"url": "https://example.com/?token=secret"}):
+        with pytest.raises(ValueError):
+            SessionEvent.create(EventType.DOMAIN_PACING_ADJUSTED, uuid4(), payload=payload | extra)
+    with pytest.raises(ValueError):
+        SessionEvent.create(
+            EventType.DOMAIN_PACING_ADJUSTED,
+            uuid4(),
+            payload=payload | {"hostname": "user:secret@example.com"},
+        )
+
+
 def test_unknown_envelope_fields_and_versions_are_rejected() -> None:
     event = SessionEvent.create(EventType.SESSION_CLOSED, uuid4())
     raw = json.loads(event.to_json())
