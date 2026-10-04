@@ -243,7 +243,8 @@ class HttpxFetcher:
                 redirects = [Redirect(h.status_code, str(h.url), h.headers.get("location", "")) for h in r.history]
                 response = HttpResponse(url, str(r.url), r.status_code, headers, b"", redirects)
                 declared, _ = media_type(headers)
-                if 200 <= r.status_code < 300 and declared and not accepts(accept, declared):
+                sniffable_json = declared == 'text/plain' and accepts(accept, 'application/json')
+                if 200 <= r.status_code < 300 and declared and not accepts(accept, declared) and not sniffable_json:
                     response.elapsed_ms = (time.perf_counter() - start) * 1000
                     raise UnsupportedMediaType(response, declared)
                 body = bytearray()

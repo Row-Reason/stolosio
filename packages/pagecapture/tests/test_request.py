@@ -78,3 +78,16 @@ def test_exclusions_become_fetch_patterns_that_cover_them():
         (Exclusion("*.example.test", "/"), Exclusion("*", "/admin"), Exclusion("ads.test", "/x"))
     )
     assert patterns == ["*://*.example.test*", "*://*/admin*", "*://ads.test*", "*://example.test*"]
+def test_structured_suffix_accept_ranges_are_validated_and_match_only_their_family():
+    from pagecapture.api import CaptureRequest, accepts
+
+    request = CaptureRequest.from_json({"url": "https://example.test/", "accept": ["application/*+json"]})
+    assert accepts(request.accept, "application/vnd.api+json")
+    assert not accepts(request.accept, "text/vnd.api+json")
+    assert not accepts(request.accept, "application/json")
+    assert not accepts(request.accept, "application/+json")
+    global_range = CaptureRequest.from_json({"url": "https://example.test/", "accept": ["*/*+json"]})
+    assert accepts(global_range.accept, "model/gltf+json")
+    assert accepts(global_range.accept, "application/ld+json")
+    assert not accepts(global_range.accept, "application/json")
+    assert not accepts(global_range.accept, "application/pdf")
