@@ -53,15 +53,19 @@ admissions. Database errors never bypass pacing, and admission never waits for N
 - Three observed origin `website_error` results without an intervening healthy result: the same
   backoff. Provider capacity, network/proxy failures, deadlines, missing pages,
   access denials and bot protection are neutral.
-- Twenty healthy samples near the allowance: increase concurrency by one if at least half
+- Ten healthy samples near the allowance by default: increase concurrency by one if at least half
   exercised its concurrency limit and concurrency can still increase; otherwise reduce spacing
-  by 10%. One control changes at a time. Default learning bounds are eight concurrent captures
+  by 20%. One control changes at a time. Default learning bounds are eight concurrent captures
   and 0.1-second spacing.
 - Sparse traffic does not raise limits or renew TTL. Near-limit healthy evidence and backoff
   renew the allowance for 24 hours. TTL expiry resets limits and counters to defaults, preserving
   active cooldowns, leases and reserved next-start times.
 - Policy generations stop old successes from undoing backoff. Older explicit refusals may
   extend a cooldown, but do not repeatedly halve limits for the same in-flight burst.
+
+With the default threshold and spacing step, sustained qualifying spacing pressure lowers
+one-second spacing to the 0.1-second floor in 110 samples. Saved operator thresholds remain
+authoritative; changing the code default does not overwrite an existing 20-sample setting.
 
 A trustworthy successful capture is healthy evidence. Rate pressure means consecutive starts
 within 1.5 times the current spacing or a recent spacing refusal (within the greater of two

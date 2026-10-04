@@ -38,12 +38,26 @@ def learn(value, observation, **changes):
 
 def test_healthy_demand_learns_spacing_and_refreshes_ttl():
     value = policy(expires_at=NOW + timedelta(seconds=60))
-    for _ in range(SETTINGS.healthy_samples):
+    for _ in range(9):
         value = learn(value, Observation("healthy"))
-    assert value.spacing_seconds == 0.9
+    assert value.spacing_seconds == 1
+    assert value.generation == 0
+    value = learn(value, Observation("healthy"))
+    assert value.spacing_seconds == 0.8
     assert value.concurrency == 2
     assert value.expires_at == NOW + timedelta(days=1)
     assert value.reason == "healthy_at_limit"
+
+
+def test_sustained_healthy_spacing_pressure_reaches_floor_in_110_samples():
+    value = policy()
+    for _ in range(100):
+        value = learn(value, Observation("healthy"))
+    assert value.spacing_seconds == pytest.approx(0.107374)
+    for _ in range(10):
+        value = learn(value, Observation("healthy"))
+    assert value.spacing_seconds == SETTINGS.minimum_spacing_seconds
+    assert value.concurrency == 2
 
 
 def test_concurrency_increases_independently_when_exercised():
@@ -235,7 +249,7 @@ async def test_learned_allowance_survives_new_repository_and_adjustment_is_idemp
         await service.release(lease, Observation("healthy"))
     replica = DomainPacing(PacingRepository(database_sessions))
     states = await replica.repository.list_states(hostname="example.test")
-    assert states[0]["spacing_seconds"] == 0.9
+    assert states[0]["spacing_seconds"] == 0.8
     async with database_sessions() as database:
         events = list(await database.scalars(select(SessionEventRecord)))
     assert len(events) == 1
