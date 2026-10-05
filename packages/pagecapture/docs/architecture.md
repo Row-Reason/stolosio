@@ -64,6 +64,9 @@ Wrongly accepting incomplete content (lost content) is worse than a needless ren
      outcome is recorded in the method cache;
    - bot challenge in the managed browser → permitted local resolution, then permitted paid challenge resolution;
      if protection holds, `failed: bot_challenge` or `bot_blocked`, retaining plain HTTP as evidence;
+   - the main-frame navigation failed (`net::ERR_*`, seen on the request or goto's error; Chrome's error page is
+     never read as content) → the site refusing or dropping the connection is `failed: unreachable` (transient), a
+     failed browser proxy `browser_unavailable`, retaining plain HTTP as evidence;
    - refused verification or still empty → `failed: incomplete_content`, retaining usable plain HTTP as evidence.
      Classifier acceptance alone never proves that JS-loaded content was acquired. Required rendering without
      capacity, a working browser or enough time retains its specific gateway failure; it cannot succeed from

@@ -111,8 +111,12 @@ token and URL queries redacted; failure messages carry the same summary.
 
 HTML that merely passes classification still requires a trustworthy render or method-cache evidence before
 it can be accepted. If verification is refused or returns an empty page, capture fails with transient
-`incomplete_content` and retains the plain HTML as failure evidence. Browser outages, capacity limits,
-deadlines and bot protection keep their specific failure codes. Unverified HTML is never promoted to
+`incomplete_content` and retains the plain HTML as failure evidence. When the site refuses or drops the
+browser's own connection (a main-frame `net::ERR_CONNECTION_REFUSED`, `_RESET`, `_CLOSED`, `_TIMED_OUT`,
+`_FAILED`, `ERR_ADDRESS_UNREACHABLE`, `ERR_NAME_NOT_RESOLVED` or `ERR_EMPTY_RESPONSE`), the capture fails as
+transient `unreachable`, also retaining the plain HTML; Chrome's error page is never assessed as page content.
+A failure of the browser's proxy (`ERR_PROXY_*`, `ERR_TUNNEL_*`, `ERR_SOCKS_*`) stays `browser_unavailable`.
+Browser outages, capacity limits, deadlines and bot protection keep their specific failure codes. Unverified HTML is never promoted to
 success because a browser attempt failed, and failed verification adds no method-cache evidence.
 
 - The method cache (`capture_method_cache`) remembers, per URL and URL pattern, where rendering
