@@ -127,7 +127,10 @@ plain HTTP ─► blocked / broken / unreachable ──────────�
   JavaScript-loaded content is present. When required browser verification meets a challenge, gets an error
   status (403, 5xx, 429), fails, or renders nothing, the capture fails and retains the plain response as evidence.
   A refused or empty verification render yields transient `incomplete_content`; unavailable capacity, browser
-  outages, deadlines and bot protection retain their specific failure codes. Uncached HTML without a configured
+  outages, deadlines and bot protection retain their specific failure codes. A browser navigation the site
+  refuses at the connection level is transient `unreachable` (a proxy failure stays `browser_unavailable`):
+  the renderer detects it from the main-frame request failure or goto's `net::ERR_*` error, not from the page
+  URL (which still reads `about:blank` until Chrome commits its error page), and never reads the error page. Uncached HTML without a configured
   browser fails as `browser_unavailable`. Cache-approved HTTP captures still skip rendering, but a failed canary
   verification is a failed capture and does not add HTTP-sufficiency evidence.
 - Rendered documents include open shadow roots (web components) as declarative shadow DOM
@@ -229,7 +232,7 @@ body shape and `Retry-After`); **503** when service capacity prevents admission 
 | `bot_challenge` | website | no | a bot challenge that was not passed by available permitted tiers (`resolution_attempted`) |
 | `bot_blocked` | website | no | a block page refusing this client or IP; local resolution then permitted proxied paid fallback (`resolution_attempted`) |
 | `redirect_loop` | website | no | the redirects don't end: a loop, or more than 10 hops |
-| `unreachable` | network | yes | no HTTP response: connection, TLS, timeout, a DNS failure not confirmed as a missing host |
+| `unreachable` | network | yes | no HTTP response: connection, TLS, timeout, a DNS failure not confirmed as a missing host; or the site refused or dropped the verifying browser's connection (a main-frame `net::ERR_CONNECTION_*`, `ERR_ADDRESS_UNREACHABLE`, `ERR_NAME_NOT_RESOLVED` or `ERR_EMPTY_RESPONSE`), with the plain response kept as evidence |
 | `host_not_found` | network | no | the host (the URL's or a redirect's) doesn't exist: a resolver confirmed it has no such name (NXDOMAIN) or no address |
 | `capacity` | gateway | yes | no browser capacity right now, including a provider refusing for its plan's limits (BrowserQL 429/402 or a concurrency/rate/quota error; `retry_after_seconds` from Retry-After, else 30 s for concurrency and 3600 s for quota) |
 | `domain_throttled` | gateway | yes | host refused shared destination admission before acquisition; retry guidance supplied by the host |

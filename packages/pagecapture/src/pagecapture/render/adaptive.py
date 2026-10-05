@@ -30,7 +30,7 @@ from . import scripts
 
 log = logging.getLogger(__name__)
 
-RENDERER_VERSION = "adaptive-7"  # bump when the algorithm changes (reported in capture evidence)
+RENDERER_VERSION = "adaptive-8"  # bump when the algorithm changes (reported in capture evidence)
 
 
 def content_lines(text: str) -> set[str]:
@@ -116,6 +116,9 @@ BUSY_S = 8.0
 PENDING_CAP_S = 3.0  # the last wait for visible loading placeholders
 DRIVER_GONE = "Connection closed while reading from the driver"
 NAVIGATED = re.compile(r"Execution context was destroyed|navigat|Cannot find context|Frame was detached", re.I)
+# A main-frame navigation Chrome failed with a network error (the page then shows chrome-error://chromewebdata/).
+# ERR_ABORTED is not a failure of the page: a newer navigation or a download replaced the request.
+NET_ERROR = re.compile(r"net::(ERR_(?!ABORTED\b)[A-Z0-9_]+)")
 
 
 class _Session:
@@ -533,10 +536,18 @@ class Renderer:
             page.on("request", lambda req: pending.add(req))
             page.on("requestfinished", lambda req: pending.discard(req))
 
+            # The main frame's last navigation failed with a network error. Recorded from the request event, because
+            # page.url still reads about:blank when goto raises: Chrome commits its error page a moment later.
+            navigation_error = None
+
             def on_failed(req):
+                nonlocal navigation_error
                 pending.discard(req)
-                if req.is_navigation_request() and req.frame == page.main_frame and excluded(req.url, exclusions):
-                    result.excluded_url = result.excluded_url or req.url
+                if req.is_navigation_request() and req.frame == page.main_frame:
+                    if excluded(req.url, exclusions):
+                        result.excluded_url = result.excluded_url or req.url
+                    elif failed := NET_ERROR.search(req.failure or ""):
+                        navigation_error = failed.group(1)
 
             page.on("requestfailed", on_failed)
             routed = self.intercept and bool(s.block_resources or exclusions)
@@ -553,9 +564,10 @@ class Renderer:
                 await page.route("**/*", route)
 
             def on_response(resp):
+                nonlocal navigation_error
                 result.requests += 1
                 if resp.request.is_navigation_request() and resp.request.frame == page.main_frame:
-                    result.status = resp.status
+                    result.status, navigation_error = resp.status, None
 
             page.on("response", on_response)
 
@@ -577,15 +589,19 @@ class Renderer:
                 )
             except Exception as e:  # keep what was captured before a timeout or a page error
                 result.error = repr(e)[:300]
+                if "Page.goto" in str(e) and (failed := NET_ERROR.search(str(e))):
+                    navigation_error = navigation_error or failed.group(1)
             result.final_url = page.url
             if excluded(result.final_url, exclusions):  # e.g. a handed-over page that redirected before the handover
                 result.excluded_url = result.excluded_url or result.final_url
-            failed_navigation = result.final_url.startswith("chrome-error://")  # Chrome's own error page
+            # Nothing on the page after a failed navigation is the site's: never read Chrome's error page as content
+            failed_navigation = bool(navigation_error) or result.final_url.startswith("chrome-error://")
             if result.excluded_url:
                 result.error = f"navigated to an excluded URL: {result.excluded_url}"
             elif failed_navigation:
-                code = re.search(r"ERR_[A-Z0-9_]+", session.html or session.text or "")
-                result.error = f"navigation failed: {code.group(0) if code else 'network error in the browser'}"
+                if not navigation_error and (code := re.search(r"ERR_[A-Z0-9_]+", session.html or session.text or "")):
+                    navigation_error = code.group(0)
+                result.error = f"navigation failed: {navigation_error or 'network error in the browser'}"
 
             async def read(expr: str, timeout_s: float = 15.0):
                 """Reads after the render are bounded: a hung page must not hold the capture (or the session)."""

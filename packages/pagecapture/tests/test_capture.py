@@ -351,6 +351,32 @@ def test_refused_browser_connection_after_a_block_page_is_bot_blocked():
     assert "ERR_HTTP2_PROTOCOL_ERROR" in r.failure.message
 
 
+class FailedNavigationTier(FakeTier):
+    def __init__(self, code):
+        super().__init__("managed", "")
+        self.code = code
+
+    async def render(self, url, deadline_s, exclusions=()):
+        return Rendered(url=url, final_url="about:blank", html="", seconds=0.4, error=f"navigation failed: {self.code}")
+
+
+@pytest.mark.parametrize(
+    "code",
+    ["ERR_CONNECTION_REFUSED", "ERR_CONNECTION_RESET", "ERR_CONNECTION_TIMED_OUT", "ERR_NAME_NOT_RESOLVED"],
+)
+def test_the_site_refusing_the_browser_is_unreachable_with_plain_html_as_evidence(code):
+    r = run(service(FakeFetcher(), managed=FailedNavigationTier(code)))
+    assert (r.failure.code, r.failure.category, r.failure.transient) == ("unreachable", "network", True)
+    assert f"(net::{code})" in r.failure.message
+    assert r.outcome == "failed" and r.document.body == ARTICLE.encode()
+
+
+@pytest.mark.parametrize("code", ["ERR_TUNNEL_CONNECTION_FAILED", "ERR_PROXY_CONNECTION_FAILED"])
+def test_the_browser_proxy_failing_stays_browser_unavailable(code):
+    r = run(service(FakeFetcher(), managed=FailedNavigationTier(code)))
+    assert (r.failure.code, r.failure.category) == ("browser_unavailable", "gateway")
+
+
 def test_a_busy_fleet_is_a_transient_capacity_failure():
     from pagecapture.render import BrowserCapacity
 

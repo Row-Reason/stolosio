@@ -78,6 +78,11 @@ BROWSER_REFUSED = {"client_error", "server_error", "rate_limited"}
 
 # The browser's proxy failed, not the site: a gateway problem (proxy providers refuse some site categories)
 PROXY_FAILURE = re.compile(r"ERR_(TUNNEL_CONNECTION_FAILED|PROXY_[A-Z_]+|SOCKS_[A-Z_]+)")
+# The browser's own connection to the site failed (refused, reset, timed out, no route, no name). Plain HTTP reached
+# the site, so this is a transient network failure (a rate-limiting site refusing connections), not a missing host.
+SITE_UNREACHABLE = re.compile(
+    r"ERR_(CONNECTION_(REFUSED|RESET|CLOSED|TIMED_OUT|FAILED)|ADDRESS_UNREACHABLE|NAME_NOT_RESOLVED|EMPTY_RESPONSE)\b"
+)
 
 
 class CaptureService:
@@ -542,6 +547,16 @@ class CaptureService:
                     self._http_block(request.url, http) or "connection refused",
                     f"the site refused the browser's connection ({rendered.error})",
                     True,
+                )
+                return self._finish(result)
+            unreachable = rendered.error.startswith("navigation failed") and SITE_UNREACHABLE.search(rendered.error)
+            if unreachable:
+                # the site itself refused or dropped the browser's connection: plain HTML stays unverified evidence
+                code = unreachable.group(0)
+                what = "the site refused the browser's connection" if code == "ERR_CONNECTION_REFUSED" else ""
+                result.document = http_doc
+                result.failure = failures.failure(
+                    "unreachable", f"{what or 'the browser could not reach the site'} (net::{code})"
                 )
                 return self._finish(result)
             code = "deadline_exceeded" if "Timeout" in rendered.error else "browser_unavailable"
