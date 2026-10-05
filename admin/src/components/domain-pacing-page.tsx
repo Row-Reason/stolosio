@@ -26,7 +26,7 @@ const reasons: Record<string, string> = {
   default: "Starting allowance",
   healthy_at_limit: "Healthy responses near allowance",
   origin_throttled: "Target throttling observed",
-  origin_overload: "Repeated target overload observed",
+  origin_overload: "Repeated target errors or refusals observed",
   ttl_expired: "Learned allowance expired",
   settings_changed: "Global settings changed",
   operator_reset: "Operator requested reset",
@@ -347,7 +347,7 @@ function HostDetails({
               value: (b) => b.origin_throttled,
             },
             {
-              label: "Target overload",
+              label: "Target errors or refusals",
               color: "#fbbf24",
               value: (b) => b.origin_overload,
             },
@@ -656,7 +656,7 @@ export function DomainPacingPage({
               <strong>{data.totals.origin_throttled}</strong> target throttling
             </span>
             <span>
-              <strong>{data.totals.origin_overload}</strong> target overload
+              <strong>{data.totals.origin_overload}</strong> target errors or refusals
             </span>
           </div>
           {hostname ? (

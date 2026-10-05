@@ -23,7 +23,9 @@ def pacing_observation(result: CaptureResult) -> Observation:
             return Observation("neutral")
         if failure.code == "rate_limited":
             return Observation("throttled", failure.retry_after_seconds)
-        if failure.code == "website_error":
+        # Repeated refusals of this client are how origins such as Companies House block a crawl.
+        # A single denied page is not a backoff; the controller needs a streak without successes.
+        if failure.code in ("website_error", "access_denied", "bot_blocked"):
             return Observation("overload", failure.retry_after_seconds)
         return Observation("neutral")
     if any(attempt.status_code == 429 for attempt in result.evidence.attempts):

@@ -1,12 +1,14 @@
 import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pagecapture.failures import failure
 from pydantic import ValidationError
 from sqlalchemy import select
 
@@ -18,6 +20,7 @@ from backend.db.models import (
     SessionEventRecord,
 )
 from backend.events import SessionEvent
+from backend.proxy.capture.pacing import pacing_observation
 from backend.proxy.domain_pacing import DomainPacing, DomainThrottled, PacingRepository
 from backend.proxy.domain_pacing.contracts import Observation, PacingSettings, Policy
 from backend.proxy.domain_pacing.controller import reset, update
@@ -125,6 +128,46 @@ def test_learning_respects_bounds_and_neutral_outcomes():
     for _ in range(40):
         value = learn(value, Observation("healthy"))
     assert value.spacing_seconds == 0.1
+
+
+def capture_result(code=None, final_url="https://example.test/page"):
+    return SimpleNamespace(
+        requested_url="https://example.test/page",
+        final_url=final_url,
+        failure=None if code is None else failure(code, code),
+        evidence=SimpleNamespace(attempts=[]),
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "outcome"),
+    [
+        (None, "healthy"),
+        ("rate_limited", "throttled"),
+        ("website_error", "overload"),
+        ("access_denied", "overload"),
+        ("bot_blocked", "overload"),
+        ("not_found", "neutral"),
+        ("bot_challenge", "neutral"),
+        ("deadline_exceeded", "neutral"),
+    ],
+)
+def test_capture_failures_map_to_pacing_outcomes(code, outcome):
+    assert pacing_observation(capture_result(code)).outcome == outcome
+
+
+def test_denied_from_another_host_is_neutral():
+    result = capture_result("access_denied", final_url="https://login.example.test/")
+    assert pacing_observation(result).outcome == "neutral"
+
+
+def test_access_denied_burst_backs_off_a_learned_allowance():
+    value = policy(concurrency=6, spacing_seconds=0.1)
+    for _ in range(SETTINGS.overload_samples):
+        value = learn(value, pacing_observation(capture_result("access_denied")))
+    assert value.concurrency == 3 and value.spacing_seconds == 0.2
+    assert value.cooldown_until == NOW + timedelta(seconds=SETTINGS.cooldown_seconds)
+    assert value.reason == "origin_overload"
 
 
 @pytest.mark.parametrize(
