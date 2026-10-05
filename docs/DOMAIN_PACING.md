@@ -50,9 +50,11 @@ admissions. Database errors never bypass pacing, and admission never waits for N
 
 - Origin `rate_limited`: immediately halve concurrency (minimum one), double spacing (within
   the configured bound), and apply origin retry guidance or the 30-second default cooldown.
-- Three observed origin `website_error` results without an intervening healthy result: the same
-  backoff. Provider capacity, network/proxy failures, deadlines, missing pages,
-  access denials and bot protection are neutral.
+- Three observed origin `website_error`, `access_denied` (HTTP 401/403) or `bot_blocked` results
+  without an intervening healthy result: the same backoff. Origins often block a crawl with
+  403s rather than 429s; an isolated denied page is broken up by healthy results and does not
+  back off. Provider capacity, network/proxy failures, deadlines, missing pages, bot challenges
+  and other website failures are neutral.
 - Ten healthy samples near the allowance by default: increase concurrency by one if at least half
   exercised its concurrency limit and concurrency can still increase; otherwise reduce spacing
   by 20%. One control changes at a time. Default learning bounds are eight concurrent captures
