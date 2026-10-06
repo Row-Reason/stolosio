@@ -47,7 +47,9 @@
         "steps": [],
         "notes": [],
         "reason_code": "media_type",
-        "comparison": null
+        "comparison": null,
+        "final_url": null,
+        "retry_after_seconds": null
       }
     ],
     "cost": {

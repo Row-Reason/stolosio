@@ -28,6 +28,7 @@ from .adapters import (
     RedirectLoop,
     UnsupportedMediaType,
     media_type,
+    parse_retry_after,
 )
 from .api import Assessment, Attempt, CaptureRequest, CaptureResult, Document, Evidence, Reason, Response, accepts
 from .cache import MethodCache, MethodPolicy, default_cache
@@ -218,6 +219,8 @@ class CaptureService:
             "",
             notes=list(verdict.notes),
             reason_code="assessment" if verdict.reason else "acquisition",
+            final_url=http.final_url,
+            retry_after_seconds=http.retry_after_seconds(),
         )
         result.evidence.attempts.append(attempt)
         reason = verdict.reason
@@ -303,7 +306,8 @@ class CaptureService:
         """
         attempt = Attempt('http', 'direct', http.status_code, round(http.elapsed_ms, 1),
                           Assessment(primary=None), 'accept', 'JSON: returned as sent',
-                          reason_code='media_type')
+                          reason_code='media_type', final_url=http.final_url,
+                          retry_after_seconds=http.retry_after_seconds())
         result.evidence.attempts.append(attempt)
         if not 200 <= http.status_code < 300:
             reason = ('rate_limited' if http.status_code == 429 else
@@ -334,6 +338,8 @@ class CaptureService:
                 "fail",
                 f"media type {media} not accepted",
                 reason_code="media_type",
+                final_url=http.final_url,
+                retry_after_seconds=http.retry_after_seconds(),
             )
         )
         result.failure = failures.failure("unsupported_media_type", f"media type {media} is not accepted")
@@ -352,8 +358,15 @@ class CaptureService:
             Assessment(primary=None),
             "escalate",
             f"body larger than {cap} bytes: rendering instead",
+            final_url=http.final_url,
+            retry_after_seconds=http.retry_after_seconds(),
         )
         result.evidence.attempts.append(attempt)
+        if http.status_code == 429:
+            attempt.assessment = Assessment("rate_limited", [Reason("rate_limited", 1.0, "rule")])
+            attempt.decision, attempt.decision_reason = "fail", "rate_limited"
+            result.failure = failures.from_reason("rate_limited", 429, "HTTP 429", http.retry_after_seconds())
+            return self._finish(result)
         declared, _ = media_type(http.headers)
         if is_json(declared) or is_xml(declared) or (
             declared in ('', 'text/plain') and json_candidate(http.body)
@@ -521,6 +534,10 @@ class CaptureService:
             steps=rendered.steps,
             notes=notes,
             reason_code="assessment" if assessment.primary else "acquisition",
+            final_url=rendered.final_url or request.url,
+            retry_after_seconds=parse_retry_after(
+                next((v for k, v in rendered.headers if k.lower() == "retry-after"), None)
+            ),
         )
         result.evidence.attempts.append(attempt)
         rendered_doc = (
@@ -598,7 +615,9 @@ class CaptureService:
         if primary is not None:  # the rendered page itself is a 404, login wall, block page, ...
             attempt.decision, attempt.decision_reason = "fail", f"rendered page: {primary}"
             result.document = rendered_doc
-            result.failure = failures.from_reason(primary, rendered.status, primary)
+            result.final_url = rendered.final_url or request.url
+            result.response = Response(rendered.status or 200, rendered.headers)
+            result.failure = failures.from_reason(primary, rendered.status, primary, attempt.retry_after_seconds)
             return self._finish(result)
         if assessment.completeness == "empty":
             attempt.decision, attempt.decision_reason = "fail", "still no content after rendering"
@@ -637,9 +656,7 @@ class CaptureService:
         attempt.decision_reason = f"rendered content is complete (plain response had {share:.0%} of it)"
         result.final_url = rendered.final_url or result.final_url
         if rendered.status:
-            result.response = Response(
-                rendered.status, http.headers if rendered.status == http.status_code else [], http.redirects
-            )
+            result.response = Response(rendered.status, rendered.headers)
         return self._captured(result, rendered_doc)
 
     @staticmethod

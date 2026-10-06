@@ -50,6 +50,11 @@ admissions. Database errors never bypass pacing, and admission never waits for N
 
 - Origin `rate_limited`: immediately halve concurrency (minimum one), double spacing (within
   the configured bound), and apply origin retry guidance or the 30-second default cooldown.
+  An HTTP 429 from any acquisition attempt on the admitted hostname drives this feedback even
+  when the final capture fails for content completeness or a later resolver succeeds. Attempt
+  destinations prevent browser redirects from attributing another host's refusal to this host.
+  Browser 401/403 and 5xx verification refusals also contribute overload feedback when the
+  capture retains plain HTTP as unverified content evidence. Browser retry headers are preserved.
 - Three observed origin `website_error`, `access_denied` (HTTP 401/403) or `bot_blocked` results
   without an intervening healthy result: the same backoff. Origins often block a crawl with
   403s rather than 429s; an isolated denied page is broken up by healthy results and does not

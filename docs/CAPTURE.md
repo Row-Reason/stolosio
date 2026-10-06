@@ -61,6 +61,11 @@ domain, which also catches redirect hops.
 
 ## Challenge resolution
 
+An origin HTTP 429 takes precedence over protection wording or challenge headers: it returns
+`rate_limited` with the origin's `Retry-After`, without invoking either resolver. Each acquisition
+attempt records its final destination and retry duration for domain pacing, independently of
+the document retained as capture evidence.
+
 When `resolve_bot_challenges` is true, bot challenges and bot block pages first try
 `local_resolution` on a lazily acquired
 local fleet slot. The initial resolver is deliberately simple: a fresh browser context using the

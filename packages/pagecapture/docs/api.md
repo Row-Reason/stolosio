@@ -316,3 +316,12 @@ work together, subject to the service cap. A deadline failure retains already-ac
 content as evidence. Render timeouts report `deadline_exceeded`. A rendered page with an empty
 declared main section and only navigation cannot verify complete content or add sufficient
 method-cache evidence.
+
+Each acquisition attempt includes `final_url` (nullable when no response was obtained) and
+`retry_after_seconds` parsed from that response. These facts describe the attempt independently
+of the retained document and allow the host to attribute origin pacing feedback correctly.
+HTTP 429 is classified as `rate_limited` before challenge detection and never invokes resolution.
+Browser navigation headers retain duplicate fields; rendered documents use browser response
+headers instead of borrowing headers from the plain HTTP response. When plain HTML is retained
+as unverified failure evidence, its top-level response facts stay with that document; the
+browser refusal and destination remain in `evidence.attempts`.

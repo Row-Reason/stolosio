@@ -55,6 +55,7 @@ def captured() -> CaptureResult:
                     "escalate",
                     "app_shell: content missing without a browser",
                     reason_code="assessment",
+                    final_url="https://news.example.test/articles/42/",
                 ),
                 Attempt(
                     "browser",
@@ -67,6 +68,7 @@ def captured() -> CaptureResult:
                     reason_code="content_comparison",
                     steps=[{"step": "parsed", "t": 0.9, "new_lines": 12, "new_items": 0}],
                     comparison={"http_coverage": 0.12, "http_sufficient": False},
+                    final_url="https://news.example.test/articles/42/",
                 ),
             ],
             cost=Cost(browser_seconds=23.6, paid=False, bytes=2874983),
@@ -98,6 +100,8 @@ def rate_limited() -> CaptureResult:
                     "fail",
                     "rate_limited",
                     reason_code="assessment",
+                    final_url=REQUEST["url"],
+                    retry_after_seconds=120.0,
                 )
             ],
             cost=Cost(bytes=len(body)),

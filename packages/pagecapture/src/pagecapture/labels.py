@@ -8,8 +8,8 @@ from pathlib import Path
 REASONS = (
     "unreachable",
     "payload_mismatch",
-    "bot_challenge",
     "rate_limited",
+    "bot_challenge",
     "geo_blocked",
     "unsupported_browser",
     "interstitial",

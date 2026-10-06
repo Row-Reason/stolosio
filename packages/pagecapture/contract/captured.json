@@ -63,7 +63,9 @@
         "steps": [],
         "notes": [],
         "reason_code": "assessment",
-        "comparison": null
+        "comparison": null,
+        "final_url": "https://news.example.test/articles/42/",
+        "retry_after_seconds": null
       },
       {
         "path": "browser",
@@ -91,7 +93,9 @@
         "comparison": {
           "http_coverage": 0.12,
           "http_sufficient": false
-        }
+        },
+        "final_url": "https://news.example.test/articles/42/",
+        "retry_after_seconds": null
       }
     ],
     "cost": {

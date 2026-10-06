@@ -53,9 +53,10 @@ class FakeFetcher:
 
 
 class FakeTier:
-    def __init__(self, tier, html, paid=False, status=200, proxied=False):
+    def __init__(self, tier, html, paid=False, status=200, proxied=False, headers=None, final_url=None):
         self.tier, self.paid, self.html, self.status, self.calls = tier, paid, html, status, 0
         self.proxied = proxied
+        self.headers, self.final_url = headers or [], final_url
 
     async def render(self, url, deadline_s, exclusions=()):
         self.calls += 1
@@ -63,7 +64,7 @@ class FakeTier:
         lines = content_lines(text)
         return Rendered(
             url=url,
-            final_url=url,
+            final_url=self.final_url or url,
             status=self.status,
             html=self.html,
             lines=lines or {"x"},
@@ -71,6 +72,7 @@ class FakeTier:
             seconds=3.2,
             steps=[{"step": "parsed", "t": 0.9, "new_lines": 5, "new_items": 0}],
             final_state={"chars": len(text), "mount": False, "pending": 0},
+            headers=self.headers,
         )
 
 
@@ -244,6 +246,80 @@ def test_not_found_is_permanent_and_rate_limit_is_transient_with_retry_after():
         )
     )
     assert (r.failure.code, r.failure.transient, r.failure.retry_after_seconds) == ("rate_limited", True, 30.0)
+
+
+@pytest.mark.parametrize("body", [BLOCK_PAGE, CHALLENGE])
+def test_429_protection_page_is_rate_limited_without_resolution(body):
+    local, cloud = FakeTier("local_resolution", ARTICLE), FakeTier("challenge_resolution", ARTICLE, proxied=True)
+    r = run(
+        service(
+            FakeFetcher(
+                status=429,
+                body=body,
+                headers=[("Content-Type", "text/html"), ("Retry-After", "86400"), ("cf-mitigated", "challenge")],
+            ),
+            local=local,
+            challenge=cloud,
+        ),
+        resolve_bot_challenges=True,
+    )
+    assert (r.failure.code, r.failure.transient, r.failure.retry_after_seconds) == ("rate_limited", True, 86400)
+    assert local.calls == cloud.calls == 0
+    assert (r.evidence.attempts[0].final_url, r.evidence.attempts[0].retry_after_seconds) == (r.requested_url, 86400)
+
+
+@pytest.mark.parametrize("body", [ARTICLE, APP_SHELL])
+@pytest.mark.parametrize("status", [429, 503])
+def test_browser_refusal_retains_destination_and_retry_evidence(body, status):
+    destination = "https://other.test/refused"
+    headers = [("Content-Type", "text/html"), ("Retry-After", "120")]
+    r = run(
+        service(
+            FakeFetcher(body=body),
+            managed=FakeTier(
+                "managed",
+                "<html><body>Temporarily unavailable</body></html>",
+                status=status,
+                headers=headers,
+                final_url=destination,
+            ),
+        )
+    )
+    attempt = r.evidence.attempts[-1]
+    assert (attempt.status_code, attempt.final_url, attempt.retry_after_seconds) == (status, destination, 120)
+    if body == ARTICLE:
+        assert r.failure.code == "incomplete_content"
+        assert r.response.status_code == 200 and r.document.body == ARTICLE.encode()
+    else:
+        assert r.failure.code == ("rate_limited" if status == 429 else "website_error")
+        assert r.failure.retry_after_seconds == 120
+        assert r.final_url == destination and r.response.status_code == status and r.response.headers == headers
+
+
+def test_rendered_document_has_browser_headers_instead_of_plain_headers():
+    headers = [("Content-Type", "text/html"), ("Set-Cookie", "a=1"), ("Set-Cookie", "b=2")]
+    r = run(service(FakeFetcher(body=APP_SHELL), managed=FakeTier("managed", ARTICLE, headers=headers)))
+    assert r.document.representation == "rendered_html" and r.response.headers == headers
+
+
+def test_oversized_429_does_not_render_or_return_truncated_bytes():
+    class TruncatedFetcher(FakeFetcher):
+        async def fetch(self, *args, **kwargs):
+            response = await super().fetch(*args, **kwargs)
+            response.truncated = True
+            return response
+
+    tier = FakeTier("managed", ARTICLE)
+    r = run(
+        service(
+            TruncatedFetcher(
+                status=429, body=BLOCK_PAGE, headers=[("Content-Type", "text/html"), ("Retry-After", "120")]
+            ),
+            managed=tier,
+        )
+    )
+    assert r.failure.code == "rate_limited" and r.failure.retry_after_seconds == 120
+    assert r.document is None and tier.calls == 0
 
 
 def test_unreachable_is_a_transient_network_failure():

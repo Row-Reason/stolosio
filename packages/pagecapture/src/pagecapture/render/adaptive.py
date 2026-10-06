@@ -61,6 +61,7 @@ class Rendered:
     final_state: dict = field(default_factory=dict)  # at the end: visible chars, empty app container, placeholders
     error: str | None = None
     excluded_url: str | None = None  # the page navigated (or redirected) to an excluded URL: nothing kept
+    headers: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def virtualized(self) -> bool:
@@ -491,6 +492,7 @@ class Renderer:
         cap_s = s.render_cap_s + (self.challenge_progress_wait_s or self.challenge_wait_s)
         cap_s = min(cap_s, deadline_s) if deadline_s else cap_s
         result = Rendered(url=url)
+        navigation_response = None
         t0 = time.perf_counter()
         browser = await (self._pw.chromium.connect_over_cdp(attach_ws) if attach_ws else self._connect(endpoint))
         try:
@@ -564,10 +566,11 @@ class Renderer:
                 await page.route("**/*", route)
 
             def on_response(resp):
-                nonlocal navigation_error
+                nonlocal navigation_error, navigation_response
                 result.requests += 1
                 if resp.request.is_navigation_request() and resp.request.frame == page.main_frame:
                     result.status, navigation_error = resp.status, None
+                    navigation_response = resp
 
             page.on("response", on_response)
 
@@ -592,6 +595,12 @@ class Renderer:
                 if "Page.goto" in str(e) and (failed := NET_ERROR.search(str(e))):
                     navigation_error = navigation_error or failed.group(1)
             result.final_url = page.url
+            if navigation_response is not None:
+                try:
+                    async with asyncio.timeout(2.0):
+                        result.headers = [(h["name"], h["value"]) for h in await navigation_response.headers_array()]
+                except Exception:
+                    log.debug("could not read browser response headers", exc_info=True)
             if excluded(result.final_url, exclusions):  # e.g. a handed-over page that redirected before the handover
                 result.excluded_url = result.excluded_url or result.final_url
             # Nothing on the page after a failed navigation is the site's: never read Chrome's error page as content

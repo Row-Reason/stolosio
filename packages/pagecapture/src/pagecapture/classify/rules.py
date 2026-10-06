@@ -364,6 +364,8 @@ def bot_challenge(doc: Document, found: dict) -> Flag:
 def rate_limited(doc: Document, found: dict) -> Flag:
     if doc.status == 429:
         return yes(1.0, "HTTP 429")
+    if challenge_header(doc):
+        return no(doc, parsed=False)  # non-429 challenge headers can reject without parsing HTML
     if doc.small and has(doc.text, RATE_PHRASES):
         return yes(0.75, "rate limit message")
     return no(doc)
@@ -497,8 +499,8 @@ def server_error(doc: Document, found: dict) -> Flag:
 
 RULES: list[tuple[str, Callable[[Document, dict], Flag]]] = [
     ("payload_mismatch", payload_mismatch),
-    ("bot_challenge", bot_challenge),
     ("rate_limited", rate_limited),
+    ("bot_challenge", bot_challenge),
     ("geo_blocked", geo_blocked),
     ("unsupported_browser", unsupported_browser),
     ("interstitial", interstitial),
