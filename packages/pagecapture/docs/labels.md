@@ -12,8 +12,8 @@ Hand-verified corpus. Labels are judged only from the plain HTTP response (statu
 |---|---|---|
 | `_unreachable` | No HTTP response: DNS failure, refused/reset connection, TLS error, timeout, redirect loop. All other columns are then `false`. | Retry later; drop after repeated failures |
 | `_payload_mismatch` | A successful (2xx/3xx) response whose body is not HTML/XML (PDF, JSON, image, plain text, binary, empty). Never for error statuses. | Route to another parser or drop |
-| `_bot_challenge` | A bot challenge, captcha or bot/"access denied" block page instead of the real page. | Real browser/proxy, or skip |
 | `_rate_limited` | HTTP 429, or the page says too many requests were sent. | Back off, retry later |
+| `_bot_challenge` | A bot challenge, captcha or bot/"access denied" block page instead of the real page. | Real browser/proxy, or skip |
 | `_geo_blocked` | HTTP 451, or the page says the site or content is unavailable in the requester's country/region. | Retry from another region |
 | `_unsupported_browser` | The page says the browser/client is unsupported or outdated (user-agent check). | Retry with another user agent |
 | `_interstitial` | A page in front of the real one: consent wall, queue/waiting room, redirect stub, region/language picker, cookies-required page, frameset. | Follow through or accept, then retry |

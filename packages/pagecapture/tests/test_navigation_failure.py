@@ -51,6 +51,13 @@ class FakeResponse:
     def __init__(self, request, status):
         self.request, self.status = request, status
 
+    async def headers_array(self):
+        return [
+            {"name": "Retry-After", "value": "120"},
+            {"name": "Set-Cookie", "value": "a=1"},
+            {"name": "Set-Cookie", "value": "b=2"},
+        ]
+
 
 class FakePage:
     """A page whose navigation either loads `html` or fails with `net_error`, raising from goto before Chrome commits
@@ -204,6 +211,7 @@ def test_a_small_page_that_loads_is_still_read_and_assessed():
     page = FakePage(html=SMALL)
     rendered = asyncio.run(FakeTier(page).render(URL, deadline_s=30))
     assert rendered.error is None and rendered.html == SMALL and rendered.final_url == URL and rendered.lines
+    assert rendered.headers == [("Retry-After", "120"), ("Set-Cookie", "a=1"), ("Set-Cookie", "b=2")]
     # an empty plain page and a small render: the render is the capture (unchanged by navigation-failure detection)
     r = capture(FakeTier(FakePage(html=SMALL)), FakeFetcher("<html><body><div id='x'></div></body></html>"))
     assert r.outcome == "captured" and r.document.representation == "rendered_html"

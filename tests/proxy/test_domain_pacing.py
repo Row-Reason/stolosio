@@ -161,6 +161,29 @@ def test_denied_from_another_host_is_neutral():
     assert pacing_observation(result).outcome == "neutral"
 
 
+@pytest.mark.parametrize("code", ["incomplete_content", "bot_blocked", "browser_unavailable", None])
+def test_origin_429_drives_pacing_regardless_of_final_capture_label(code):
+    result = capture_result(code)
+    result.evidence.attempts = [
+        SimpleNamespace(status_code=429, final_url=result.requested_url, retry_after_seconds=86400)
+    ]
+    assert pacing_observation(result) == Observation("throttled", 86400)
+
+
+@pytest.mark.parametrize("status", [429, 503, 403])
+def test_browser_refusal_attribution_uses_attempt_destination(status):
+    result = capture_result("incomplete_content")
+    attempt = SimpleNamespace(
+        status_code=status, final_url="https://other.test/refused", retry_after_seconds=120
+    )
+    result.evidence.attempts = [attempt]
+    assert pacing_observation(result) == Observation("neutral")
+    attempt.final_url = result.requested_url
+    assert pacing_observation(result) == Observation(
+        "throttled" if status == 429 else "overload", 120
+    )
+
+
 def test_access_denied_burst_backs_off_a_learned_allowance():
     value = policy(concurrency=6, spacing_seconds=0.1)
     for _ in range(SETTINGS.overload_samples):

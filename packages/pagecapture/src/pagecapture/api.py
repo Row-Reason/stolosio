@@ -217,6 +217,8 @@ class Attempt:
     notes: list[str] = field(default_factory=list)
     reason_code: DecisionCode = "acquisition"  # stable machine reason; decision_reason is explanatory prose
     comparison: dict | None = None  # browser attempts: {"http_coverage": 0.97, "http_sufficient": true}
+    final_url: str | None = None  # destination of this attempt, independently of the retained document
+    retry_after_seconds: float | None = None
 
 
 @dataclass
