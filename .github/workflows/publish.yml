@@ -95,11 +95,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
+      - name: Normalize registry owner
+        run: echo "REGISTRY_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
       - name: Derive image metadata
         id: metadata
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.name }}
+          images: ${{ env.REGISTRY }}/${{ env.REGISTRY_OWNER }}/${{ matrix.name }}
           flavor: latest=false
           tags: |
             type=ref,event=branch
@@ -150,10 +153,13 @@ jobs:
           --password-stdin
           <<< "${GHCR_TOKEN}"
 
+      - name: Normalize registry owner
+        run: echo "REGISTRY_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
       - name: Publish chart
         env:
           RELEASE_VERSION: ${{ github.ref_name }}
         run: |
           release_version="${RELEASE_VERSION#v}"
           helm push "dist/stolosio-${release_version}.tgz" \
-            "oci://ghcr.io/${{ github.repository_owner }}/charts"
+            "oci://ghcr.io/${REGISTRY_OWNER}/charts"
