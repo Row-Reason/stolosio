@@ -4,8 +4,8 @@ description: CDP-compatible browser acquisition gateway
 type: application
 version: 0.1.16
 appVersion: "0.1.15"
-home: https://github.com/elei-io/stolosio
+home: https://github.com/Row-Reason/stolosio
 sources:
-  - https://github.com/elei-io/stolosio
+  - https://github.com/Row-Reason/stolosio
 annotations:
-  org.opencontainers.image.source: https://github.com/elei-io/stolosio
+  org.opencontainers.image.source: https://github.com/Row-Reason/stolosio

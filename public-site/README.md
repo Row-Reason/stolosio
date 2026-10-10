@@ -44,7 +44,7 @@ future screenshots; the public site must not connect to a private admin deployme
 
 ## Container artifact
 
-The image is published as `ghcr.io/elei-io/stolosio-public` by the repository's
+The image is published as `ghcr.io/row-reason/stolosio-public` by the repository's
 Publish workflow. It serves static files with Nginx on port 8080 and runs as a
 non-root user. It has no backend dependency or API proxy.
 

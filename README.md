@@ -108,10 +108,11 @@ connection Secrets and creates separate API and UI Services; it does not provisi
 those dependencies, ingress, DNS, or TLS. See
 [Kubernetes and k3s](docs/KUBERNETES.md).
 
-The publishing workflow targets `ghcr.io/elei-io/stolosio` and
-`ghcr.io/elei-io/stolosio-admin`; the chart is published as
-`oci://ghcr.io/elei-io/charts/stolosio`. A ready-to-copy Flux example lives under
-[`deploy/flux`](deploy/flux).
+The publishing workflow targets `ghcr.io/row-reason/stolosio` and
+`ghcr.io/row-reason/stolosio-admin`; future tagged charts publish as
+`oci://ghcr.io/row-reason/charts/stolosio`. Only the historical chart exists under
+`elei-io` today; [`deploy/flux`](deploy/flux) still demonstrates that retained
+legacy chart. Follow the [handover constraints](docs/RELEASING.md#company-namespace-handover) before using it.
 
 ## Documentation
 

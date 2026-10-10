@@ -15,12 +15,12 @@ GitHub Actions provides two paths:
 The published Stolosio artifacts are:
 
 ```text
-ghcr.io/elei-io/stolosio
-ghcr.io/elei-io/stolosio-admin
-ghcr.io/elei-io/stolosio-public
-ghcr.io/elei-io/stolosio-browserless
-ghcr.io/elei-io/stolosio-fetch-proxy
-oci://ghcr.io/elei-io/charts/stolosio
+ghcr.io/row-reason/stolosio
+ghcr.io/row-reason/stolosio-admin
+ghcr.io/row-reason/stolosio-public
+ghcr.io/row-reason/stolosio-browserless
+ghcr.io/row-reason/stolosio-fetch-proxy
+oci://ghcr.io/row-reason/charts/stolosio (future tagged releases)
 ```
 
 The first image is shared by the API, workers, migration Job, and fleet controller.
@@ -56,9 +56,9 @@ git push origin v0.1.15
 
 GitHub's repository `GITHUB_TOKEN` publishes all artifacts; no long-lived publishing
 credential is required. New packages follow the repository/package visibility
-configuration. For a private package, a homelab needs a classic personal access token
-with `read:packages`. Alternatively, make the six packages public after their first
-publication.
+configuration. Company images are private; operators need a classic personal access
+token with `read:packages` and a corresponding image-pull Secret. Do not change
+package visibility as part of namespace retirement.
 
 Enable all `CI` checks as required checks on the default branch before treating a
 release as supported. GitHub Actions dependencies are commit-pinned and Dependabot is
@@ -78,3 +78,18 @@ artifacts for secrets or private data. Automated scans supplement that review.
 Version 0.1.15 names the operator UI `stolosio-admin`. Helm values are
 `admin` and `adminImage`; the source directory is `admin/`. The former web package
 is retired. Use 0.1.15 or a pinned newer Git chart with matching images.
+
+## Company namespace handover
+
+The running company deployment uses the image commit `sha-49018a7` (the public
+site uses `sha-c25b219`). The chart defaults use that available company image
+commit; they do not imply that a `0.1.15` company release exists. A future version
+release must update the default image tags together with all versions checked by
+Publish. Company IaC supplies explicit digest pins and private-registry credentials.
+
+The historical `elei-io/charts/stolosio` chart has not been copied to Row-Reason.
+The OCI install examples and `deploy/flux/source.yaml` still target that retained
+legacy chart and are not the company deployment procedure. Those older published
+charts embed old image defaults: override all four image repositories and tags
+with company pins before using them after legacy image retirement. The company
+cluster uses the chart from its own IaC tree.
