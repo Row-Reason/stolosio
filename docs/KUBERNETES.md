@@ -75,9 +75,9 @@ replacement decision.
 GitHub Actions publishes:
 
 ```text
-ghcr.io/elei-io/stolosio
-ghcr.io/elei-io/stolosio-admin
-oci://ghcr.io/elei-io/charts/stolosio
+ghcr.io/row-reason/stolosio
+ghcr.io/row-reason/stolosio-admin
+oci://ghcr.io/row-reason/charts/stolosio (future tagged releases)
 ```
 
 The Stolosio image is shared by the API, migration Job, maintenance worker,

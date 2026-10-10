@@ -13,10 +13,11 @@ Released charts are available at:
 oci://ghcr.io/elei-io/charts/stolosio
 ```
 
-The chart defaults to the matching version of `ghcr.io/elei-io/stolosio` and
-`ghcr.io/elei-io/stolosio-admin`. Browserless is pulled directly from
-`ghcr.io/browserless/chromium` at the version pinned in `values.yaml`; Stolosio does not
-republish it.
+The source chart defaults to private company images at `sha-49018a7`, including
+`stolosio-browserless` and `stolosio-fetch-proxy`. Configure an image-pull Secret.
+The old published OCI chart above embeds legacy defaults; override all four image
+repositories and tags with company pins, or install the source chart. See the
+[handover constraints](../../docs/RELEASING.md#company-namespace-handover).
 
 ## Required values
 
